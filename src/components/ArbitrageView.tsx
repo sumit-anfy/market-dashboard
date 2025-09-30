@@ -155,21 +155,28 @@ export function ArbitrageView() {
         <CardContent>
           <div className="grid gap-6 md:grid-cols-3">
             {/* Gap (Next/Near) Filter */}
-            <div className="space-y-3">
+            <div className="space-y-4">
               <Label className="text-sm font-medium">Gap (Next/Near) %</Label>
-              <div className="space-y-2">
-                <Slider
-                  value={[filters.nextNearMin, filters.nextNearMax]}
-                  onValueChange={(value) => setFilters(prev => ({ 
-                    ...prev, 
-                    nextNearMin: value[0], 
-                    nextNearMax: value[1] 
-                  }))}
-                  min={-10}
-                  max={10}
-                  step={0.1}
-                  className="w-full"
-                />
+              <div className="space-y-4">
+                <div className="relative px-3">
+                  <Slider
+                    value={[filters.nextNearMin, filters.nextNearMax]}
+                    onValueChange={(value) => setFilters(prev => ({ 
+                      ...prev, 
+                      nextNearMin: value[0], 
+                      nextNearMax: value[1] 
+                    }))}
+                    min={-10}
+                    max={10}
+                    step={0.1}
+                    className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>-10%</span>
+                    <span>0%</span>
+                    <span>+10%</span>
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <Label className="text-xs text-muted-foreground">Min</Label>
@@ -180,7 +187,7 @@ export function ArbitrageView() {
                         ...prev, 
                         nextNearMin: parseFloat(e.target.value) || -10 
                       }))}
-                      className="h-8 text-xs"
+                      className="h-8 text-xs font-mono"
                       step={0.1}
                     />
                   </div>
@@ -193,7 +200,7 @@ export function ArbitrageView() {
                         ...prev, 
                         nextNearMax: parseFloat(e.target.value) || 10 
                       }))}
-                      className="h-8 text-xs"
+                      className="h-8 text-xs font-mono"
                       step={0.1}
                     />
                   </div>
@@ -202,21 +209,28 @@ export function ArbitrageView() {
             </div>
 
             {/* Gap (Far/Next) Filter */}
-            <div className="space-y-3">
+            <div className="space-y-4">
               <Label className="text-sm font-medium">Gap (Far/Next) %</Label>
-              <div className="space-y-2">
-                <Slider
-                  value={[filters.farNextMin, filters.farNextMax]}
-                  onValueChange={(value) => setFilters(prev => ({ 
-                    ...prev, 
-                    farNextMin: value[0], 
-                    farNextMax: value[1] 
-                  }))}
-                  min={-10}
-                  max={10}
-                  step={0.1}
-                  className="w-full"
-                />
+              <div className="space-y-4">
+                <div className="relative px-3">
+                  <Slider
+                    value={[filters.farNextMin, filters.farNextMax]}
+                    onValueChange={(value) => setFilters(prev => ({ 
+                      ...prev, 
+                      farNextMin: value[0], 
+                      farNextMax: value[1] 
+                    }))}
+                    min={-10}
+                    max={10}
+                    step={0.1}
+                    className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>-10%</span>
+                    <span>0%</span>
+                    <span>+10%</span>
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <Label className="text-xs text-muted-foreground">Min</Label>
@@ -227,7 +241,7 @@ export function ArbitrageView() {
                         ...prev, 
                         farNextMin: parseFloat(e.target.value) || -10 
                       }))}
-                      className="h-8 text-xs"
+                      className="h-8 text-xs font-mono"
                       step={0.1}
                     />
                   </div>
@@ -240,7 +254,7 @@ export function ArbitrageView() {
                         ...prev, 
                         farNextMax: parseFloat(e.target.value) || 10 
                       }))}
-                      className="h-8 text-xs"
+                      className="h-8 text-xs font-mono"
                       step={0.1}
                     />
                   </div>
@@ -249,21 +263,28 @@ export function ArbitrageView() {
             </div>
 
             {/* Gap (Far/Near) Filter */}
-            <div className="space-y-3">
+            <div className="space-y-4">
               <Label className="text-sm font-medium">Gap (Far/Near) %</Label>
-              <div className="space-y-2">
-                <Slider
-                  value={[filters.farNearMin, filters.farNearMax]}
-                  onValueChange={(value) => setFilters(prev => ({ 
-                    ...prev, 
-                    farNearMin: value[0], 
-                    farNearMax: value[1] 
-                  }))}
-                  min={-10}
-                  max={10}
-                  step={0.1}
-                  className="w-full"
-                />
+              <div className="space-y-4">
+                <div className="relative px-3">
+                  <Slider
+                    value={[filters.farNearMin, filters.farNearMax]}
+                    onValueChange={(value) => setFilters(prev => ({ 
+                      ...prev, 
+                      farNearMin: value[0], 
+                      farNearMax: value[1] 
+                    }))}
+                    min={-10}
+                    max={10}
+                    step={0.1}
+                    className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                    <span>-10%</span>
+                    <span>0%</span>
+                    <span>+10%</span>
+                  </div>
+                </div>
                 <div className="flex gap-2">
                   <div className="flex-1">
                     <Label className="text-xs text-muted-foreground">Min</Label>
@@ -274,7 +295,7 @@ export function ArbitrageView() {
                         ...prev, 
                         farNearMin: parseFloat(e.target.value) || -10 
                       }))}
-                      className="h-8 text-xs"
+                      className="h-8 text-xs font-mono"
                       step={0.1}
                     />
                   </div>
@@ -287,7 +308,7 @@ export function ArbitrageView() {
                         ...prev, 
                         farNearMax: parseFloat(e.target.value) || 10 
                       }))}
-                      className="h-8 text-xs"
+                      className="h-8 text-xs font-mono"
                       step={0.1}
                     />
                   </div>

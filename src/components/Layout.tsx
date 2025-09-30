@@ -1,12 +1,12 @@
 import React from 'react';
-import { BarChart3, Clock, TrendingUp, Menu, X, ArrowLeftRight } from 'lucide-react';
+import { BarChart3, Clock, TrendingUp, Menu, X, ArrowLeftRight, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
 interface LayoutProps {
   children: React.ReactNode;
   currentView: string;
-  onViewChange: (view: 'historical' | 'live' | 'arbitrage') => void;
+  onViewChange: (view: 'historical' | 'live' | 'arbitrage' | 'covered-calls') => void;
 }
 
 export function Layout({ children, currentView, onViewChange }: LayoutProps) {
@@ -47,6 +47,14 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
               >
                 <ArrowLeftRight className="h-4 w-4" />
                 Arbitrage
+              </Button>
+              <Button
+                variant={currentView === 'covered-calls' ? 'default' : 'ghost'}
+                onClick={() => onViewChange('covered-calls')}
+                className="flex items-center gap-2"
+              >
+                <Shield className="h-4 w-4" />
+                Covered Calls
               </Button>
             </nav>
 
@@ -98,6 +106,17 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
               >
                 <ArrowLeftRight className="h-4 w-4" />
                 Arbitrage
+              </Button>
+              <Button
+                variant={currentView === 'covered-calls' ? 'default' : 'ghost'}
+                onClick={() => {
+                  onViewChange('covered-calls');
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full justify-start gap-2"
+              >
+                <Shield className="h-4 w-4" />
+                Covered Calls
               </Button>
             </div>
           </div>
