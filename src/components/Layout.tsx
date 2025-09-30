@@ -1,12 +1,12 @@
 import React from 'react';
-import { BarChart3, Clock, TrendingUp, Menu, X } from 'lucide-react';
+import { BarChart3, Clock, TrendingUp, Menu, X, ArrowLeftRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 
 interface LayoutProps {
   children: React.ReactNode;
   currentView: string;
-  onViewChange: (view: 'historical' | 'live') => void;
+  onViewChange: (view: 'historical' | 'live' | 'arbitrage') => void;
 }
 
 export function Layout({ children, currentView, onViewChange }: LayoutProps) {
@@ -39,6 +39,14 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
               >
                 <Clock className="h-4 w-4" />
                 Live Data
+              </Button>
+              <Button
+                variant={currentView === 'arbitrage' ? 'default' : 'ghost'}
+                onClick={() => onViewChange('arbitrage')}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+                Arbitrage
               </Button>
             </nav>
 
@@ -79,6 +87,17 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
               >
                 <Clock className="h-4 w-4" />
                 Live Data
+              </Button>
+              <Button
+                variant={currentView === 'arbitrage' ? 'default' : 'ghost'}
+                onClick={() => {
+                  onViewChange('arbitrage');
+                  setIsMobileMenuOpen(false);
+                }}
+                className="w-full justify-start gap-2"
+              >
+                <ArrowLeftRight className="h-4 w-4" />
+                Arbitrage
               </Button>
             </div>
           </div>
