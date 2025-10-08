@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -11,90 +12,29 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
+import { Button } from '@/components/ui/button';
+import { RefreshCw, Loader2 } from 'lucide-react';
 
-// Sample data for the arbitrage table
-const arbitrageData = [
-  {
-    underlyingSymbol: 'RELIANCE',
-    underlyingPrice: 2456.75,
-    nearFutureSymbol: 'RELIANCE25JANFUT',
-    nearFuturePrice: 2461.20,
-    nearFutureVolume: 125000,
-    nextFutureSymbol: 'RELIANCE25FEBFUT',
-    nextFuturePrice: 2465.80,
-    nextFutureVolume: 89000,
-    farFutureSymbol: 'RELIANCE25MARFUT',
-    farFuturePrice: 2470.35,
-    farFutureVolume: 45000,
-  },
-  {
-    underlyingSymbol: 'TCS',
-    underlyingPrice: 3890.45,
-    nearFutureSymbol: 'TCS25JANFUT',
-    nearFuturePrice: 3895.20,
-    nearFutureVolume: 78000,
-    nextFutureSymbol: 'TCS25FEBFUT',
-    nextFuturePrice: 3900.15,
-    nextFutureVolume: 52000,
-    farFutureSymbol: 'TCS25MARFUT',
-    farFuturePrice: 3905.60,
-    farFutureVolume: 31000,
-  },
-  {
-    underlyingSymbol: 'INFY',
-    underlyingPrice: 1834.30,
-    nearFutureSymbol: 'INFY25JANFUT',
-    nearFuturePrice: 1837.85,
-    nearFutureVolume: 95000,
-    nextFutureSymbol: 'INFY25FEBFUT',
-    nextFuturePrice: 1841.70,
-    nextFutureVolume: 67000,
-    farFutureSymbol: 'INFY25MARFUT',
-    farFuturePrice: 1845.25,
-    farFutureVolume: 38000,
-  },
-  {
-    underlyingSymbol: 'HDFCBANK',
-    underlyingPrice: 1678.90,
-    nearFutureSymbol: 'HDFCBANK25JANFUT',
-    nearFuturePrice: 1682.45,
-    nearFutureVolume: 110000,
-    nextFutureSymbol: 'HDFCBANK25FEBFUT',
-    nextFuturePrice: 1686.20,
-    nextFutureVolume: 73000,
-    farFutureSymbol: 'HDFCBANK25MARFUT',
-    farFuturePrice: 1690.15,
-    farFutureVolume: 42000,
-  },
-  {
-    underlyingSymbol: 'ICICIBANK',
-    underlyingPrice: 1245.60,
-    nearFutureSymbol: 'ICICIBANK25JANFUT',
-    nearFuturePrice: 1248.35,
-    nearFutureVolume: 88000,
-    nextFutureSymbol: 'ICICIBANK25FEBFUT',
-    nextFuturePrice: 1251.80,
-    nextFutureVolume: 61000,
-    farFutureSymbol: 'ICICIBANK25MARFUT',
-    farFuturePrice: 1255.40,
-    farFutureVolume: 35000,
-  },
-  {
-    underlyingSymbol: 'YESBANK',
-    underlyingPrice: 23.45,
-    nearFutureSymbol: 'YESBANK25JANFUT',
-    nearFuturePrice: 23.8,
-    nearFutureVolume: 450000,
-    nextFutureSymbol: 'YESBANK25FEBFUT',
-    nextFuturePrice: 24.1,
-    nextFutureVolume: 320000,
-    farFutureSymbol: 'YESBANK25MARFUT',
-    farFuturePrice: 24.5,
-    farFutureVolume: 180000,
-  },
-];
+interface ArbitrageData {
+  underlyingSymbol: string;
+  underlyingPrice: number;
+  nearFutureSymbol: string | null;
+  nearFuturePrice: number | null;
+  nearFutureVolume: number | null;
+  nextFutureSymbol: string | null;
+  nextFuturePrice: number | null;
+  nextFutureVolume: number | null;
+  farFutureSymbol: string | null;
+  farFuturePrice: number | null;
+  farFutureVolume: number | null;
+}
 
 export function ArbitrageView() {
+  // Data states
+  const [arbitrageData, setArbitrageData] = useState<ArbitrageData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Filter states
   const [filters, setFilters] = useState({
     nextNearMin: -5,
@@ -104,6 +44,51 @@ export function ArbitrageView() {
     farNearMin: -5,
     farNearMax: 5,
   });
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+
+  // Fetch arbitrage data from API
+  const fetchArbitrageData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await axios.get('http://15.207.43.160:3000/api/arbitrage', {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 10000, // 10 second timeout
+      });
+
+      if (response.data.success) {
+        setArbitrageData(response.data.data);
+      } else {
+        throw new Error(response.data.error || 'Failed to fetch arbitrage data');
+      }
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
+          setError('Unable to connect to backend server. Please ensure the API server is running on http://localhost:3000');
+        } else if (err.response) {
+          setError(`Server error: ${err.response.status} - ${err.response.statusText}`);
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError(err instanceof Error ? err.message : 'An error occurred');
+      }
+      console.error('Error fetching arbitrage data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch data on component mount
+  useEffect(() => {
+    fetchArbitrageData();
+  }, []);
 
   // Format price based on value - no decimals if >= 50, one decimal if < 50
   const formatPrice = (price: number) => {
@@ -124,16 +109,45 @@ export function ArbitrageView() {
 
   // Filter data based on gap percentages
   const filteredData = arbitrageData.filter(row => {
-    const gapNextNear = calculateGap(row.nextFuturePrice, row.nearFuturePrice, row.underlyingPrice);
-    const gapFarNext = calculateGap(row.farFuturePrice, row.nextFuturePrice, row.underlyingPrice);
-    const gapFarNear = calculateGap(row.farFuturePrice, row.nearFuturePrice, row.underlyingPrice);
-    
-    return (
-      gapNextNear.gapPercentage >= filters.nextNearMin && gapNextNear.gapPercentage <= filters.nextNearMax &&
-      gapFarNext.gapPercentage >= filters.farNextMin && gapFarNext.gapPercentage <= filters.farNextMax &&
-      gapFarNear.gapPercentage >= filters.farNearMin && gapFarNear.gapPercentage <= filters.farNearMax
-    );
+    // Calculate gaps only if data exists
+    let passesNextNearFilter = true;
+    let passesFarNextFilter = true;
+    let passesFarNearFilter = true;
+
+    // Check Next/Near gap filter only if both prices exist
+    if (row.nextFuturePrice && row.nearFuturePrice) {
+      const gapNextNear = calculateGap(row.nextFuturePrice, row.nearFuturePrice, row.underlyingPrice);
+      passesNextNearFilter = gapNextNear.gapPercentage >= filters.nextNearMin &&
+                             gapNextNear.gapPercentage <= filters.nextNearMax;
+    }
+
+    // Check Far/Next gap filter only if both prices exist
+    if (row.farFuturePrice && row.nextFuturePrice) {
+      const gapFarNext = calculateGap(row.farFuturePrice, row.nextFuturePrice, row.underlyingPrice);
+      passesFarNextFilter = gapFarNext.gapPercentage >= filters.farNextMin &&
+                            gapFarNext.gapPercentage <= filters.farNextMax;
+    }
+
+    // Check Far/Near gap filter only if both prices exist
+    if (row.farFuturePrice && row.nearFuturePrice) {
+      const gapFarNear = calculateGap(row.farFuturePrice, row.nearFuturePrice, row.underlyingPrice);
+      passesFarNearFilter = gapFarNear.gapPercentage >= filters.farNearMin &&
+                            gapFarNear.gapPercentage <= filters.farNearMax;
+    }
+
+    return passesNextNearFilter && passesFarNextFilter && passesFarNearFilter;
   });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  const paginatedData = filteredData.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, rowsPerPage]);
 
   return (
     <div className="space-y-6">
@@ -144,7 +158,37 @@ export function ArbitrageView() {
             Monitor price differences between underlying stocks and their futures contracts
           </p>
         </div>
+        <Button
+          onClick={fetchArbitrageData}
+          disabled={loading}
+          variant="outline"
+          size="sm"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Loading...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </>
+          )}
+        </Button>
       </div>
+
+      {/* Error State */}
+      {error && (
+        <Card className="border-destructive">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-destructive">
+              <span className="font-semibold">Error:</span>
+              <span>{error}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card>
@@ -351,70 +395,170 @@ export function ArbitrageView() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredData.map((row, index) => {
-                  const gapNextNear = calculateGap(row.nextFuturePrice, row.nearFuturePrice, row.underlyingPrice);
-                  const gapFarNext = calculateGap(row.farFuturePrice, row.nextFuturePrice, row.underlyingPrice);
-                  const gapFarNear = calculateGap(row.farFuturePrice, row.nearFuturePrice, row.underlyingPrice);
-                  
-                  return (
-                    <TableRow key={index} className="hover:bg-muted/50">
-                      <TableCell className="text-center font-medium">{row.underlyingSymbol}</TableCell>
-                      <TableCell className="text-center font-mono text-base">
-                        {formatPrice(row.underlyingPrice)}
-                      </TableCell>
-                      <TableCell className="text-center text-sm text-muted-foreground">
-                        {row.nearFutureSymbol}
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-base">
-                        {formatPrice(row.nearFuturePrice)}
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-sm">
-                        {formatVolume(row.nearFutureVolume)}
-                      </TableCell>
-                      <TableCell className="text-center text-sm text-muted-foreground">
-                        {row.nextFutureSymbol}
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-base">
-                        {formatPrice(row.nextFuturePrice)}
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-sm">
-                        {formatVolume(row.nextFutureVolume)}
-                      </TableCell>
-                      <TableCell className="text-center text-sm text-muted-foreground">
-                        {row.farFutureSymbol}
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-base">
-                        {formatPrice(row.farFuturePrice)}
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-sm">
-                        {formatVolume(row.farFutureVolume)}
-                      </TableCell>
-                      <TableCell className={`text-center font-mono text-base ${gapNextNear.gapAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {gapNextNear.gapAmount > 0 ? '+' : ''}{formatPrice(gapNextNear.gapAmount)}
-                      </TableCell>
-                      <TableCell className={`text-center font-mono text-base ${gapNextNear.gapPercentage > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {gapNextNear.gapPercentage > 0 ? '+' : ''}{gapNextNear.gapPercentage.toFixed(1)}%
-                      </TableCell>
-                      <TableCell className={`text-center font-mono text-base ${gapFarNext.gapAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {gapFarNext.gapAmount > 0 ? '+' : ''}{formatPrice(gapFarNext.gapAmount)}
-                      </TableCell>
-                      <TableCell className={`text-center font-mono text-base ${gapFarNext.gapPercentage > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {gapFarNext.gapPercentage > 0 ? '+' : ''}{gapFarNext.gapPercentage.toFixed(1)}%
-                      </TableCell>
-                      <TableCell className={`text-center font-mono text-base ${gapFarNear.gapAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {gapFarNear.gapAmount > 0 ? '+' : ''}{formatPrice(gapFarNear.gapAmount)}
-                      </TableCell>
-                      <TableCell className={`text-center font-mono text-base ${gapFarNear.gapPercentage > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                        {gapFarNear.gapPercentage > 0 ? '+' : ''}{gapFarNear.gapPercentage.toFixed(1)}%
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={17} className="text-center py-8">
+                      <div className="flex items-center justify-center gap-2">
+                        <Loader2 className="h-6 w-6 animate-spin" />
+                        <span>Loading arbitrage data...</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={17} className="text-center py-8 text-muted-foreground">
+                      No data available matching the current filters
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedData.map((row, index) => {
+                    // Calculate gaps only if data exists
+                    const gapNextNear = (row.nextFuturePrice && row.nearFuturePrice)
+                      ? calculateGap(row.nextFuturePrice, row.nearFuturePrice, row.underlyingPrice)
+                      : null;
+                    const gapFarNext = (row.farFuturePrice && row.nextFuturePrice)
+                      ? calculateGap(row.farFuturePrice, row.nextFuturePrice, row.underlyingPrice)
+                      : null;
+                    const gapFarNear = (row.farFuturePrice && row.nearFuturePrice)
+                      ? calculateGap(row.farFuturePrice, row.nearFuturePrice, row.underlyingPrice)
+                      : null;
+
+                    return (
+                      <TableRow key={index} className="hover:bg-muted/50">
+                        <TableCell className="text-center font-medium">{row.underlyingSymbol}</TableCell>
+                        <TableCell className="text-center font-mono text-base">
+                          {formatPrice(row.underlyingPrice)}
+                        </TableCell>
+                        <TableCell className="text-center text-sm text-muted-foreground">
+                          {row.nearFutureSymbol || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-base">
+                          {row.nearFuturePrice ? formatPrice(row.nearFuturePrice) : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-sm">
+                          {row.nearFutureVolume ? formatVolume(row.nearFutureVolume) : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center text-sm text-muted-foreground">
+                          {row.nextFutureSymbol || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-base">
+                          {row.nextFuturePrice ? formatPrice(row.nextFuturePrice) : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-sm">
+                          {row.nextFutureVolume ? formatVolume(row.nextFutureVolume) : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center text-sm text-muted-foreground">
+                          {row.farFutureSymbol || 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-base">
+                          {row.farFuturePrice ? formatPrice(row.farFuturePrice) : 'N/A'}
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-sm">
+                          {row.farFutureVolume ? formatVolume(row.farFutureVolume) : 'N/A'}
+                        </TableCell>
+                        <TableCell className={`text-center font-mono text-base ${gapNextNear ? (gapNextNear.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                          {gapNextNear ? `${gapNextNear.gapAmount > 0 ? '+' : ''}${formatPrice(gapNextNear.gapAmount)}` : 'N/A'}
+                        </TableCell>
+                        <TableCell className={`text-center font-mono text-base ${gapNextNear ? (gapNextNear.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                          {gapNextNear ? `${gapNextNear.gapPercentage > 0 ? '+' : ''}${gapNextNear.gapPercentage.toFixed(1)}%` : 'N/A'}
+                        </TableCell>
+                        <TableCell className={`text-center font-mono text-base ${gapFarNext ? (gapFarNext.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                          {gapFarNext ? `${gapFarNext.gapAmount > 0 ? '+' : ''}${formatPrice(gapFarNext.gapAmount)}` : 'N/A'}
+                        </TableCell>
+                        <TableCell className={`text-center font-mono text-base ${gapFarNext ? (gapFarNext.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                          {gapFarNext ? `${gapFarNext.gapPercentage > 0 ? '+' : ''}${gapFarNext.gapPercentage.toFixed(1)}%` : 'N/A'}
+                        </TableCell>
+                        <TableCell className={`text-center font-mono text-base ${gapFarNear ? (gapFarNear.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                          {gapFarNear ? `${gapFarNear.gapAmount > 0 ? '+' : ''}${formatPrice(gapFarNear.gapAmount)}` : 'N/A'}
+                        </TableCell>
+                        <TableCell className={`text-center font-mono text-base ${gapFarNear ? (gapFarNear.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                          {gapFarNear ? `${gapFarNear.gapPercentage > 0 ? '+' : ''}${gapFarNear.gapPercentage.toFixed(1)}%` : 'N/A'}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>
         </CardContent>
       </Card>
+
+      {/* Pagination Controls */}
+      {!loading && filteredData.length > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* Rows per page selector */}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="rowsPerPage" className="text-sm whitespace-nowrap">
+                  Rows per page:
+                </Label>
+                <select
+                  id="rowsPerPage"
+                  value={rowsPerPage}
+                  onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                  className="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={250}>250</option>
+                  <option value={500}>500</option>
+                </select>
+              </div>
+
+              {/* Page info and navigation */}
+              <div className="flex items-center gap-4">
+                <span className="text-sm text-muted-foreground">
+                  Showing {startIndex + 1}-{Math.min(endIndex, filteredData.length)} of {filteredData.length}
+                </span>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                  >
+                    First
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+
+                  <span className="text-sm font-medium px-2">
+                    Page {currentPage} of {totalPages}
+                  </span>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Last
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -436,7 +580,7 @@ export function ArbitrageView() {
             <div className="text-2xl font-bold font-mono">
               {filteredData.length > 0 ? (
                 filteredData.reduce((acc, row) => {
-                  const gap = calculateGap(row.nextFuturePrice, row.nearFuturePrice, row.underlyingPrice);
+                  const gap = calculateGap(row.nextFuturePrice || 0, row.nearFuturePrice || 0, row.underlyingPrice || 0);
                   return acc + gap.gapPercentage;
                 }, 0) / filteredData.length
               ).toFixed(1) : '0.0'}%
@@ -453,7 +597,7 @@ export function ArbitrageView() {
             <div className="text-2xl font-bold font-mono">
               {filteredData.length > 0 ? (
                 filteredData.reduce((acc, row) => {
-                  const gap = calculateGap(row.farFuturePrice, row.nearFuturePrice, row.underlyingPrice);
+                  const gap = calculateGap(row.farFuturePrice || 0, row.nearFuturePrice || 0, row.underlyingPrice || 0);
                   return acc + gap.gapPercentage;
                 }, 0) / filteredData.length
               ).toFixed(1) : '0.0'}%

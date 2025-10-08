@@ -47,11 +47,15 @@ export function DataTableBody({ children, className }: DataTableBodyProps) {
 interface DataTableRowProps {
   children: React.ReactNode;
   className?: string;
+  onClick?: () => void;
 }
 
-export function DataTableRow({ children, className }: DataTableRowProps) {
+export function DataTableRow({ children, className, onClick }: DataTableRowProps) {
   return (
-    <tr className={cn("border-b transition-colors hover:bg-muted/50", className)}>
+    <tr
+      className={cn("border-b transition-colors hover:bg-muted/50", className)}
+      onClick={onClick}
+    >
       {children}
     </tr>
   );
