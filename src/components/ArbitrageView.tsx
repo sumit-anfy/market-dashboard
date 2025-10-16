@@ -13,7 +13,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Loader2 } from 'lucide-react';
+import { RefreshCw, Loader2, Activity } from 'lucide-react';
+import { LiveDataModal } from './LiveDataModal';
 
 interface ArbitrageData {
   underlyingSymbol: string;
@@ -48,6 +49,11 @@ export function ArbitrageView() {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+
+  // Modal states
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('');
+  const [modalTitle, setModalTitle] = useState<string>('');
 
   // Fetch arbitrage data from API
   const fetchArbitrageData = async () => {
@@ -148,6 +154,13 @@ export function ArbitrageView() {
   useEffect(() => {
     setCurrentPage(1);
   }, [filters, rowsPerPage]);
+
+  // Handle row click to open live data modal
+  const handleRowClick = (symbol: string) => {
+    setSelectedSymbol(symbol);
+    setModalTitle(`Live Data - ${symbol}`);
+    setIsModalOpen(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -424,8 +437,17 @@ export function ArbitrageView() {
                       : null;
 
                     return (
-                      <TableRow key={index} className="hover:bg-muted/50">
-                        <TableCell className="text-center font-medium">{row.underlyingSymbol}</TableCell>
+                      <TableRow
+                        key={index}
+                        className="hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => handleRowClick(row.underlyingSymbol)}
+                      >
+                        <TableCell className="text-center font-medium">
+                          <div className="flex items-center justify-center gap-2">
+                            {row.underlyingSymbol}
+                            <Activity className="h-4 w-4 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </TableCell>
                         <TableCell className="text-center font-mono text-base">
                           {formatPrice(row.underlyingPrice)}
                         </TableCell>
@@ -606,6 +628,14 @@ export function ArbitrageView() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Live Data Modal */}
+      <LiveDataModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        symbol={selectedSymbol}
+        title={modalTitle}
+      />
     </div>
   );
 }
