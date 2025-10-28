@@ -11,8 +11,7 @@ export function LiveMarketData() {
     currentSubscriptions,
     error,
   } = useSocketIO({
-    url: 'http://localhost:3002',
-    // url: 'http://15.207.43.160:3000',
+    url: import.meta.env.VITE_API_BASE_URL,
     autoConnect: true,
   });
 

@@ -61,7 +61,7 @@ export function ArbitrageView() {
       setLoading(true);
       setError(null);
 
-      const response = await axios.get('http://15.207.43.160:3000/api/arbitrage', {
+      const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/arbitrage`, {
         headers: {
           'Content-Type': 'application/json',
         },
@@ -76,7 +76,7 @@ export function ArbitrageView() {
     } catch (err) {
       if (axios.isAxiosError(err)) {
         if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
-          setError('Unable to connect to backend server. Please ensure the API server is running on http://localhost:3000');
+          setError('Unable to connect to backend server.');
         } else if (err.response) {
           setError(`Server error: ${err.response.status} - ${err.response.statusText}`);
         } else {

@@ -35,8 +35,7 @@ export interface UseSocketIOReturn {
 
 export function useSocketIO(options: UseSocketIOOptions = {}): UseSocketIOReturn {
   const {
-    url = 'http://15.207.43.160:3000',
-    // url = 'http://localhost:3002',
+    url = import.meta.env.VITE_API_BASE_URL,
     autoConnect = true,
     reconnection = true,
     reconnectionAttempts = 5,
