@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -14,9 +15,9 @@ import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Loader2, Activity } from 'lucide-react';
-import { LiveDataModal } from './LiveDataModal';
 
 interface ArbitrageData {
+  instrumentId: number;
   underlyingSymbol: string;
   underlyingPrice: number;
   nearFutureSymbol: string | null;
@@ -31,6 +32,8 @@ interface ArbitrageData {
 }
 
 export function ArbitrageView() {
+  const navigate = useNavigate();
+
   // Data states
   const [arbitrageData, setArbitrageData] = useState<ArbitrageData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,11 +52,6 @@ export function ArbitrageView() {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
-
-  // Modal states
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('');
-  const [modalTitle, setModalTitle] = useState<string>('');
 
   // Fetch arbitrage data from API
   const fetchArbitrageData = async () => {
@@ -155,11 +153,36 @@ export function ArbitrageView() {
     setCurrentPage(1);
   }, [filters, rowsPerPage]);
 
-  // Handle row click to open live data modal
-  const handleRowClick = (symbol: string) => {
-    setSelectedSymbol(symbol);
-    setModalTitle(`Live Data - ${symbol}`);
-    setIsModalOpen(true);
+  // Handle row click to navigate to details page in a new tab
+  const handleRowClick = (row: ArbitrageData) => {
+    const currentDate = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
+
+    // Calculate gaps for passing to the details page
+    const gap1 = (row.nextFuturePrice && row.nearFuturePrice)
+      ? row.nextFuturePrice - row.nearFuturePrice
+      : 0;
+    const gap2 = (row.farFuturePrice && row.nextFuturePrice)
+      ? row.farFuturePrice - row.nextFuturePrice
+      : 0;
+
+    // Construct the URL with state parameters as query string
+    const url = `/arbitrage/${row.instrumentId}/${currentDate}?` +
+      new URLSearchParams({
+        instrumentid: row.instrumentId.toString(),
+        name: row.underlyingSymbol,
+        date: currentDate,
+        symbol_1: row.nearFutureSymbol || '',
+        price_1: row.nearFuturePrice?.toString() || '',
+        symbol_2: row.nextFutureSymbol || '',
+        price_2: row.nextFuturePrice?.toString() || '',
+        symbol_3: row.farFutureSymbol || '',
+        price_3: row.farFuturePrice?.toString() || '',
+        gap_1: gap1.toString(),
+        gap_2: gap2.toString(),
+      }).toString();
+
+    // Open in new tab
+    window.open(url, '_blank');
   };
 
   return (
@@ -440,7 +463,7 @@ export function ArbitrageView() {
                       <TableRow
                         key={index}
                         className="hover:bg-muted/50 cursor-pointer transition-colors"
-                        onClick={() => handleRowClick(row.underlyingSymbol)}
+                        onClick={() => handleRowClick(row)}
                       >
                         <TableCell className="text-center font-medium">
                           <div className="flex items-center justify-center gap-2">
@@ -628,14 +651,6 @@ export function ArbitrageView() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Live Data Modal */}
-      <LiveDataModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        symbol={selectedSymbol}
-        title={modalTitle}
-      />
     </div>
   );
 }
