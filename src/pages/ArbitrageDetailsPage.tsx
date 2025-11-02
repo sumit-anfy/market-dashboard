@@ -66,10 +66,13 @@ export default function ArbitrageDetailsPage() {
     const name = searchParams.get('name');
     const date = searchParams.get('date');
     const symbol_1 = searchParams.get('symbol_1');
+    const time_1 = searchParams.get('time_1');
     const price_1 = searchParams.get('price_1');
     const symbol_2 = searchParams.get('symbol_2');
+    const time_2 = searchParams.get('time_2');
     const price_2 = searchParams.get('price_2');
     const symbol_3 = searchParams.get('symbol_3');
+    const time_3 = searchParams.get('time_3');
     const price_3 = searchParams.get('price_3');
     const gap_1 = searchParams.get('gap_1');
     const gap_2 = searchParams.get('gap_2');
@@ -84,10 +87,13 @@ export default function ArbitrageDetailsPage() {
       name,
       date,
       symbol_1: symbol_1 || '',
+      time_1,
       price_1: parseFloat(price_1 || '0'),
       symbol_2: symbol_2 || '',
+      time_2,
       price_2: parseFloat(price_2 || '0'),
       symbol_3: symbol_3 || '',
+      time_3,
       price_3: parseFloat(price_3 || '0'),
       gap_1: parseFloat(gap_1 || '0'),
       gap_2: parseFloat(gap_2 || '0'),
@@ -101,14 +107,53 @@ export default function ArbitrageDetailsPage() {
   const [liveData, setLiveData] = useState<LiveDataRow[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Get symbols from state
-  const symbols = useMemo(() => {
-    if (!state) return [];
-    return [state.symbol_1, state.symbol_2, state.symbol_3].filter(Boolean);
+  // Check if current time is within market hours (9 AM - 4 PM IST)
+  const isMarketHours = useMemo(() => {
+    const now = new Date();
+    // Convert to IST (UTC+5:30)
+    const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const hours = istTime.getHours();
+    const minutes = istTime.getMinutes();
+
+    // Market hours: 9:00 AM (9:00) to 4:00 PM (16:00)
+    const currentTimeInMinutes = hours * 60 + minutes;
+    const marketOpenTime = 9 * 60; // 9:00 AM
+    const marketCloseTime = 16 * 60; // 4:00 PM
+
+    return currentTimeInMinutes >= marketOpenTime && currentTimeInMinutes < marketCloseTime;
+  }, []);
+
+  // Update market hours status every minute
+  const [isMarketOpen, setIsMarketOpen] = useState(isMarketHours);
+
+  useEffect(() => {
+    // Update market hours status immediately
+    setIsMarketOpen(isMarketHours);
+
+    // Set up interval to check every minute
+    const interval = setInterval(() => {
+      const now = new Date();
+      const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const hours = istTime.getHours();
+      const minutes = istTime.getMinutes();
+      const currentTimeInMinutes = hours * 60 + minutes;
+      const marketOpenTime = 9 * 60;
+      const marketCloseTime = 16 * 60;
+
+      setIsMarketOpen(currentTimeInMinutes >= marketOpenTime && currentTimeInMinutes < marketCloseTime);
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [isMarketHours]);
+
+  // Get symbol from state (single symbol)
+  const symbol = useMemo(() => {
+    if (!state) return '';
+    return state.name;
   }, [state]);
 
   // WebSocket connection for live data
-  const { isConnected, marketData, subscribeToSymbols, unsubscribeFromSymbols } = useSocketIO();
+  const { isConnected, marketData, marketDataHistory, subscribeToSymbols, unsubscribeFromSymbols } = useSocketIO();
 
   // Fetch filtered arbitrage data
   const {
@@ -128,72 +173,86 @@ export default function ArbitrageDetailsPage() {
     maxGap: gapRange[1],
   });
 
-  // Track the currently subscribed symbols to avoid duplicate subscriptions
-  const subscribedSymbolsRef = useRef<string[]>([]);
+  // Track the currently subscribed symbol to avoid duplicate subscriptions
+  const subscribedSymbolRef = useRef<string>('');
 
-  // Subscribe to symbols when connected
+  // Subscribe to symbol when connected and during market hours
   useEffect(() => {
-    if (symbols.length === 0 || !isConnected) {
+    // Only subscribe during market hours
+    if (!symbol || !isConnected || !isMarketOpen) {
+      // Unsubscribe if market is closed but we were subscribed
+      if (subscribedSymbolRef.current && !isMarketOpen) {
+        console.log('🔕 Unsubscribing - Market closed:', subscribedSymbolRef.current);
+        unsubscribeFromSymbols([subscribedSymbolRef.current]);
+        subscribedSymbolRef.current = '';
+      }
       return;
     }
 
     // Check if we need to subscribe (avoid duplicate subscriptions)
-    const symbolsKey = symbols.sort().join(',');
-    const currentKey = subscribedSymbolsRef.current.sort().join(',');
-
-    if (symbolsKey !== currentKey) {
-      // Unsubscribe from old symbols if any
-      if (subscribedSymbolsRef.current.length > 0) {
-        console.log('🔕 Unsubscribing from old symbols:', subscribedSymbolsRef.current);
-        unsubscribeFromSymbols(subscribedSymbolsRef.current);
+    if (symbol !== subscribedSymbolRef.current) {
+      // Unsubscribe from old symbol if any
+      if (subscribedSymbolRef.current) {
+        console.log('🔕 Unsubscribing from old symbol:', subscribedSymbolRef.current);
+        unsubscribeFromSymbols([subscribedSymbolRef.current]);
       }
 
-      // Subscribe to new symbols
-      console.log('🔔 Subscribing to symbols:', symbols);
-      subscribeToSymbols(symbols);
-      subscribedSymbolsRef.current = [...symbols];
+      // Subscribe to new symbol
+      console.log('🔔 Subscribing to symbol:', symbol);
+      subscribeToSymbols([symbol]);
+      subscribedSymbolRef.current = symbol;
     }
 
     // Cleanup: unsubscribe when component unmounts
     return () => {
-      if (subscribedSymbolsRef.current.length > 0) {
-        console.log('🔕 Unsubscribing on unmount:', subscribedSymbolsRef.current);
-        unsubscribeFromSymbols(subscribedSymbolsRef.current);
-        subscribedSymbolsRef.current = [];
+      if (subscribedSymbolRef.current) {
+        console.log('🔕 Unsubscribing on unmount:', subscribedSymbolRef.current);
+        unsubscribeFromSymbols([subscribedSymbolRef.current]);
+        subscribedSymbolRef.current = '';
       }
     };
-  }, [symbols.join(','), isConnected, subscribeToSymbols, unsubscribeFromSymbols]);
+  }, [symbol, isConnected, isMarketOpen, subscribeToSymbols, unsubscribeFromSymbols]);
 
   // Update live data from market data
   useEffect(() => {
-    if (marketData && symbols.length > 0) {
-      const updatedLiveData = symbols.map((symbol) => {
-        const data = marketData[symbol];
-        if (data) {
-          return {
-            symbol,
-            time: new Date(data.time || Date.now()).toLocaleTimeString(),
-            ltp: data.ltp || 0,
-            volume: data.volume || 0,
-            oi: data.oi || 0,
-            ltq: data.ltq || 0,
-            avgTradedPrice: data.avgTradedPrice || 0,
-            tbq: data.tbq || 0,
-            tsq: data.tsq || 0,
-            open: data.open || 0,
-            high: data.high || 0,
-            low: data.low || 0,
-            close: data.close || 0,
-            totalBuyQty: data.totalBuyQty || 0,
-            totalSellQty: data.totalSellQty || 0,
-          };
-        }
-        return null;
-      }).filter(Boolean) as LiveDataRow[];
+    console.log('🔍 Market Data received:', marketData);
+    console.log('🔍 Market Data History:', marketDataHistory);
+    console.log('🔍 Current Symbol:', symbol);
 
-      setLiveData(updatedLiveData);
+    if (marketData && symbol) {
+      // Check if marketData has the symbol property and matches our subscribed symbol
+      if (marketData.symbol === symbol) {
+        console.log('✅ Data matches subscribed symbol:', symbol, marketData);
+
+        const newRow: LiveDataRow = {
+          symbol: marketData.symbol || symbol,
+          time: new Date(marketData.timestamp || marketData.time || Date.now()).toLocaleTimeString(),
+          ltp: marketData.ltp || marketData.price || 0,
+          volume: marketData.volume || 0,
+          oi: marketData.oi || 0,
+          ltq: marketData.ltq || 0,
+          avgTradedPrice: marketData.avgTradedPrice || 0,
+          tbq: marketData.tbq || 0,
+          tsq: marketData.tsq || 0,
+          open: marketData.open || 0,
+          high: marketData.high || 0,
+          low: marketData.low || 0,
+          close: marketData.close || 0,
+          totalBuyQty: marketData.totalBuyQty || 0,
+          totalSellQty: marketData.totalSellQty || 0,
+        };
+
+        // Keep only latest 5 rows
+        setLiveData((prev) => {
+          const updated = [newRow, ...prev].slice(0, 5);
+          console.log('📊 Updated live data (latest 5):', updated);
+          return updated;
+        });
+      } else {
+        console.log('⚠️ Symbol mismatch - Expected:', symbol, 'Received:', marketData.symbol);
+      }
     }
-  }, [marketData, symbols]);
+  }, [marketData, symbol]);
 
   // Manual refresh handler
   const handleRefresh = async () => {
@@ -257,32 +316,32 @@ export default function ArbitrageDetailsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Near Future Symbol</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Next Future Symbol</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Far Future Symbol</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Gap</TableHead>
-                  <TableHead>Gap</TableHead>
+                  <TableHead className="text-center">Name</TableHead>
+                  <TableHead className="text-center">Date</TableHead>
+                  <TableHead className="text-center">Near Future Symbol</TableHead>
+                  <TableHead className="text-center">Price</TableHead>
+                  <TableHead className="text-center">Next Future Symbol</TableHead>
+                  <TableHead className="text-center">Price</TableHead>
+                  <TableHead className="text-center">Far Future Symbol</TableHead>
+                  <TableHead className="text-center">Price</TableHead>
+                  <TableHead className="text-center">Gap</TableHead>
+                  <TableHead className="text-center">Gap</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <TableRow>
-                  <TableCell>{state.name}</TableCell>
-                  <TableCell>{new Date(state.date).toLocaleDateString()}</TableCell>
-                  <TableCell>{state.symbol_1}</TableCell>
-                  <TableCell>{formatNumber(state.price_1)}</TableCell>
-                  <TableCell>{state.symbol_2}</TableCell>
-                  <TableCell>{formatNumber(state.price_2)}</TableCell>
-                  <TableCell>{state.symbol_3}</TableCell>
-                  <TableCell>{formatNumber(state.price_3)}</TableCell>
-                  <TableCell className={state.gap_1 > 0 ? "text-green-600" : "text-red-600"}>
+                  <TableCell className="text-center">{state.name}</TableCell>
+                  <TableCell className="text-center">{state.date}</TableCell>
+                  <TableCell className="text-center">{state.symbol_1}</TableCell>
+                  <TableCell className="text-center">{formatNumber(state.price_1)}</TableCell>
+                  <TableCell className="text-center">{state.symbol_2}</TableCell>
+                  <TableCell className="text-center">{formatNumber(state.price_2)}</TableCell>
+                  <TableCell className="text-center">{state.symbol_3}</TableCell>
+                  <TableCell className="text-center">{formatNumber(state.price_3)}</TableCell>
+                  <TableCell className={state.gap_1 > 0 ? "text-green-600 text-center" : "text-red-600 text-center"}>
                     {formatNumber(state.gap_1)}
                   </TableCell>
-                  <TableCell className={state.gap_2 > 0 ? "text-green-600" : "text-red-600"}>
+                  <TableCell className={state.gap_2 > 0 ? "text-green-600 text-center" : "text-red-600 text-center"}>
                     {formatNumber(state.gap_2)}
                   </TableCell>
                 </TableRow>
@@ -298,70 +357,87 @@ export default function ArbitrageDetailsPage() {
           <div className="flex items-center justify-between">
             <CardTitle>Live Market Data</CardTitle>
             <div className="flex items-center gap-2">
-              <Badge variant={isConnected ? "default" : "destructive"}>
-                {isConnected ? "LIVE" : "OFFLINE"}
-              </Badge>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRefresh}
-                disabled={isRefreshing}
-              >
-                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-              </Button>
+              {isMarketOpen ? (
+                <>
+                  <Badge variant={isConnected ? "default" : "destructive"}>
+                    {isConnected ? "LIVE" : "OFFLINE"}
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                  >
+                    <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                  </Button>
+                </>
+              ) : (
+                <Badge variant="secondary">MARKET CLOSED</Badge>
+              )}
             </div>
           </div>
+          {!isMarketOpen && (
+            <CardDescription className="mt-2">
+              Live market data is only available during market hours (9:00 AM - 4:00 PM IST)
+            </CardDescription>
+          )}
         </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Symbol</TableHead>
-                  <TableHead>Time</TableHead>
-                  <TableHead>LTP</TableHead>
-                  <TableHead>Volume</TableHead>
-                  <TableHead>OI</TableHead>
-                  <TableHead>LTQ</TableHead>
-                  <TableHead>Avg Price</TableHead>
-                  <TableHead>TBQ</TableHead>
-                  <TableHead>TSQ</TableHead>
-                  <TableHead>Open</TableHead>
-                  <TableHead>High</TableHead>
-                  <TableHead>Low</TableHead>
-                  <TableHead>Close</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {liveData.length > 0 ? (
-                  liveData.map((row, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell className="font-medium">{row.symbol}</TableCell>
-                      <TableCell>{row.time}</TableCell>
-                      <TableCell>{formatNumber(row.ltp)}</TableCell>
-                      <TableCell>{row.volume.toLocaleString()}</TableCell>
-                      <TableCell>{row.oi.toLocaleString()}</TableCell>
-                      <TableCell>{row.ltq.toLocaleString()}</TableCell>
-                      <TableCell>{formatNumber(row.avgTradedPrice)}</TableCell>
-                      <TableCell>{row.tbq.toLocaleString()}</TableCell>
-                      <TableCell>{row.tsq.toLocaleString()}</TableCell>
-                      <TableCell>{formatNumber(row.open)}</TableCell>
-                      <TableCell>{formatNumber(row.high)}</TableCell>
-                      <TableCell>{formatNumber(row.low)}</TableCell>
-                      <TableCell>{formatNumber(row.close)}</TableCell>
-                    </TableRow>
-                  ))
-                ) : (
+        
+          {isMarketOpen ? (
+            <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={13} className="text-center text-muted-foreground">
-                      {isConnected ? "Waiting for live data..." : "Disconnected from live feed"}
-                    </TableCell>
+                    <TableHead className="text-center">Symbol</TableHead>
+                    <TableHead className="text-center">Time</TableHead>
+                    <TableHead className="text-center">LTP</TableHead>
+                    <TableHead className="text-center">Volume</TableHead>
+                    <TableHead className="text-center">OI</TableHead>
+                    <TableHead className="text-center">LTQ</TableHead>
+                    <TableHead className="text-center">Avg Price</TableHead>
+                    <TableHead className="text-center">TBQ</TableHead>
+                    <TableHead className="text-center">TSQ</TableHead>
+                    <TableHead className="text-center">Open</TableHead>
+                    <TableHead className="text-center">High</TableHead>
+                    <TableHead className="text-center">Low</TableHead>
+                    <TableHead className="text-center">Close</TableHead>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                </TableHeader>
+                <TableBody>
+                  {liveData.length > 0 ? (
+                    liveData.map((row, idx) => (
+                      <TableRow key={idx}>
+                        <TableCell className="font-medium">{row.symbol}</TableCell>
+                        <TableCell className="text-center">{row.time}</TableCell>
+                        <TableCell className="text-center">{formatNumber(row.ltp)}</TableCell>
+                        <TableCell className="text-center">{row.volume.toLocaleString()}</TableCell>
+                        <TableCell className="text-center">{row.oi.toLocaleString()}</TableCell>
+                        <TableCell className="text-center">{row.ltq.toLocaleString()}</TableCell>
+                        <TableCell className="text-center">{formatNumber(row.avgTradedPrice)}</TableCell>
+                        <TableCell className="text-center">{row.tbq.toLocaleString()}</TableCell>
+                        <TableCell className="text-center">{row.tsq.toLocaleString()}</TableCell>
+                        <TableCell className="text-center">{formatNumber(row.open)}</TableCell>
+                        <TableCell className="text-center">{formatNumber(row.high)}</TableCell>
+                        <TableCell className="text-center">{formatNumber(row.low)}</TableCell>
+                        <TableCell className="text-center">{formatNumber(row.close)}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={13} className="text-center text-muted-foreground">
+                        {isConnected ? "Waiting for live data..." : "Disconnected from live feed"}
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
         </CardContent>
+          ) : (
+            <div> 
+            </div>
+          )}
       </Card>
 
       {/* Section 3: Filtered Query Data */}
@@ -372,15 +448,11 @@ export default function ArbitrageDetailsPage() {
         <CardContent className="space-y-6">
           {/* Filters */}
           <Card>
-            <CardHeader>
-              <CardTitle>Filters</CardTitle>
-              <CardDescription>Filter historical data by time range, gap type, and gap range</CardDescription>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="mt-6">
               <div className="grid gap-6 md:grid-cols-3">
                 {/* Time Range Toggle */}
                 <div className="space-y-4">
-                  <Label className="text-sm font-medium">Time Range</Label>
+                  <Label className="text-sm font-medium">Data Trend</Label>
                   <div className="flex items-center space-x-2">
                     <Label htmlFor="time-range" className="text-sm">Day-wise</Label>
                     <Switch
@@ -395,7 +467,7 @@ export default function ArbitrageDetailsPage() {
                 {/* Gap Type Filter */}
                 <div className="space-y-4">
                   <Label className="text-sm font-medium">Gap Type</Label>
-                  <RadioGroup value={gapFilter} onValueChange={(value: any) => setGapFilter(value)}>
+                  <RadioGroup className="flex space-x-2" value={gapFilter} onValueChange={(value: any) => setGapFilter(value)}>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="both" id="both" />
                       <Label htmlFor="both" className="text-sm font-normal">All</Label>
@@ -422,34 +494,28 @@ export default function ArbitrageDetailsPage() {
                         min={-100}
                         max={100}
                         step={1}
-                        className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
+                        className="w-full 
+                          [&_[role=slider]]:h-5 
+                          [&_[role=slider]]:w-5 
+                          [&_[role=slider]]:border-2 
+                          [&_[role=slider]]:border-primary 
+                          [&_[role=slider]]:bg-background 
+                          [&_[role=slider]]:shadow-lg 
+                          [&>.relative]:h-2 
+                          [&_.bg-primary]:bg-primary"
                       />
+
+                      {/* ✅ Static scale labels */}
                       <div className="flex justify-between text-xs text-muted-foreground mt-1">
                         <span>-100</span>
                         <span>0</span>
                         <span>+100</span>
                       </div>
-                    </div>
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">Min</Label>
-                        <Input
-                          type="number"
-                          value={gapRange[0]}
-                          onChange={(e) => setGapRange([parseFloat(e.target.value) || -100, gapRange[1]])}
-                          className="h-8 text-xs font-mono"
-                          step={1}
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">Max</Label>
-                        <Input
-                          type="number"
-                          value={gapRange[1]}
-                          onChange={(e) => setGapRange([gapRange[0], parseFloat(e.target.value) || 100])}
-                          className="h-8 text-xs font-mono"
-                          step={1}
-                        />
+
+                      {/* ✅ Dynamic value labels */}
+                      <div className="absolute top-0 left-0 right-0 -translate-y-4 flex justify-between text-xs font-medium text-primary mx-3">
+                        <span>{gapRange[0]}</span>
+                        <span>{gapRange[1]}</span>
                       </div>
                     </div>
                   </div>
@@ -496,15 +562,18 @@ export default function ArbitrageDetailsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Near Future Symbol</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Next Future Symbol</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Far Future Symbol</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Gap</TableHead>
-                  <TableHead>Gap</TableHead>
+                  <TableHead className="text-center">Date</TableHead>
+                  <TableHead className="text-center">Near Future Symbol</TableHead>
+                  <TableHead className="text-center">Near Future Time</TableHead>
+                  <TableHead className="text-center">Price</TableHead>
+                  <TableHead className="text-center">Next Future Symbol</TableHead>
+                  <TableHead className="text-center">Next Future Time</TableHead>
+                  <TableHead className="text-center">Price</TableHead>
+                  <TableHead className="text-center">Far Future Symbol</TableHead>
+                  <TableHead className="text-center">Far Future Time</TableHead>
+                  <TableHead className="text-center">Price</TableHead>
+                  <TableHead className="text-center">Gap (Near & Next)</TableHead>
+                  <TableHead className="text-center">Gap (Next & Far)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -523,19 +592,22 @@ export default function ArbitrageDetailsPage() {
                 ) : filteredData && filteredData.length > 0 ? (
                   filteredData.map((row: any, idx: number) => (
                     <TableRow key={idx}>
-                      <TableCell>
+                      <TableCell className="text-center">
                         {row.date.split("T")[0]}
                       </TableCell>
-                      <TableCell>{row.symbol_1 || 'N/A'}</TableCell>
-                      <TableCell>{formatNumber(row.price_1)}</TableCell>
-                      <TableCell>{row.symbol_2 || 'N/A'}</TableCell>
-                      <TableCell>{formatNumber(row.price_2)}</TableCell>
-                      <TableCell>{row.symbol_3 || 'N/A'}</TableCell>
-                      <TableCell>{formatNumber(row.price_3)}</TableCell>
-                      <TableCell className={row.gap_1 > 0 ? "text-green-600" : "text-red-600"}>
+                      <TableCell className="text-center">{row.symbol_1 || 'N/A'}</TableCell>
+                      <TableCell className="text-center">{row.time_1 || '00:00'}</TableCell>
+                      <TableCell className="text-center">{formatNumber(row.price_1)}</TableCell>
+                      <TableCell className="text-center">{row.symbol_2 || 'N/A'}</TableCell>
+                      <TableCell className="text-center">{row.time_2 || '00:00'}</TableCell>
+                      <TableCell className="text-center">{formatNumber(row.price_2)}</TableCell>
+                      <TableCell className="text-center">{row.symbol_3 || 'N/A'}</TableCell>
+                      <TableCell className="text-center">{row.time_3 || '00:00'}</TableCell>
+                      <TableCell className="text-center">{formatNumber(row.price_3)}</TableCell>
+                      <TableCell className={row.gap_1 > 0 ? "text-green-600 text-center" : "text-red-600 text-center"}>
                         {formatNumber(row.gap_1)}
                       </TableCell>
-                      <TableCell className={row.gap_2 > 0 ? "text-green-600" : "text-red-600"}>
+                      <TableCell className={row.gap_2 > 0 ? "text-green-600 text-center" : "text-red-600 text-center"}>
                         {formatNumber(row.gap_2)}
                       </TableCell>
                     </TableRow>

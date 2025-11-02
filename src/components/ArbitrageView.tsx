@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+// import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -20,6 +20,7 @@ interface ArbitrageData {
   instrumentId: number;
   underlyingSymbol: string;
   underlyingPrice: number;
+  time: string;
   nearFutureSymbol: string | null;
   nearFuturePrice: number | null;
   nearFutureVolume: number | null;
@@ -32,7 +33,7 @@ interface ArbitrageData {
 }
 
 export function ArbitrageView() {
-  const navigate = useNavigate();
+  // const navigate = useNavigate();
 
   // Data states
   const [arbitrageData, setArbitrageData] = useState<ArbitrageData[]>([]);
@@ -170,7 +171,7 @@ export function ArbitrageView() {
       new URLSearchParams({
         instrumentid: row.instrumentId.toString(),
         name: row.underlyingSymbol,
-        date: currentDate,
+        date: row.time,
         symbol_1: row.nearFutureSymbol || '',
         price_1: row.nearFuturePrice?.toString() || '',
         symbol_2: row.nextFutureSymbol || '',
