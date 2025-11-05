@@ -11,6 +11,8 @@ interface UseArbitrageDetailsParams {
   gapFilter: "both" | "positive" | "negative";
   minGap?: number;
   maxGap?: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 interface PaginationInfo {
@@ -42,6 +44,8 @@ export const useArbitrageDetails = ({
   gapFilter,
   minGap,
   maxGap,
+  startDate,
+  endDate,
 }: UseArbitrageDetailsParams) => {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -69,6 +73,14 @@ export const useArbitrageDetails = ({
         params.maxGap = maxGap;
       }
 
+      if (startDate) {
+        params.startDate = startDate;
+      }
+
+      if (endDate) {
+        params.endDate = endDate;
+      }
+
       const response = await axios.get<ArbitrageDetailsResponse>(
         `${API_BASE_URL}/arbitrage-details/${instrumentId}/filtered`,
         { params }
@@ -93,7 +105,7 @@ export const useArbitrageDetails = ({
     if (instrumentId) {
       fetchData();
     }
-  }, [instrumentId, timeRange, page, limit, gapFilter, minGap, maxGap]);
+  }, [instrumentId, timeRange, page, limit, gapFilter, minGap, maxGap, startDate, endDate]);
 
   const refetch = () => {
     fetchData();

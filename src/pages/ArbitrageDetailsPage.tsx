@@ -1,13 +1,12 @@
 import { useEffect, useState, useMemo, useRef } from "react";
 import { useParams, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown } from "lucide-react";
+import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -106,6 +105,14 @@ export default function ArbitrageDetailsPage() {
   const [gapRange, setGapRange] = useState<[number, number]>([-50, 50]);
   const [liveData, setLiveData] = useState<LiveDataRow[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(360);
+  const [dateRange, setDateRange] = useState<[number, number]>([0, 100]); // Percentage-based (UI state)
+  const [debouncedDateRange, setDebouncedDateRange] = useState<[number, number]>([0, 100]); // Debounced for API
+  const [dateRangeBounds, setDateRangeBounds] = useState<{ minDate: Date | null; maxDate: Date | null }>({
+    minDate: null,
+    maxDate: null,
+  });
 
   // Check if current time is within market hours (9 AM - 4 PM IST)
   const isMarketHours = useMemo(() => {
@@ -155,6 +162,40 @@ export default function ArbitrageDetailsPage() {
   // WebSocket connection for live data
   const { isConnected, marketData, marketDataHistory, subscribeToSymbols, unsubscribeFromSymbols } = useSocketIO();
 
+  // Debounce date range changes (500ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedDateRange(dateRange);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [dateRange]);
+
+  // Calculate actual date range from percentage slider (using debounced value)
+  const actualDateRange = useMemo(() => {
+    const { minDate, maxDate } = dateRangeBounds;
+
+    // If dates haven't been set yet, or if range is at full (0-100), don't filter by date
+    if (!minDate || !maxDate || (debouncedDateRange[0] === 0 && debouncedDateRange[1] === 100)) {
+      return { startDate: undefined, endDate: undefined };
+    }
+
+    const totalDays = Math.floor((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
+    const startDayOffset = Math.floor((debouncedDateRange[0] / 100) * totalDays);
+    const endDayOffset = Math.floor((debouncedDateRange[1] / 100) * totalDays);
+
+    const startDate = new Date(minDate);
+    startDate.setDate(startDate.getDate() + startDayOffset);
+
+    const endDate = new Date(minDate);
+    endDate.setDate(endDate.getDate() + endDayOffset);
+
+    return {
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+    };
+  }, [dateRangeBounds, debouncedDateRange]);
+
   // Fetch filtered arbitrage data
   const {
     data: filteredData,
@@ -166,15 +207,20 @@ export default function ArbitrageDetailsPage() {
   } = useArbitrageDetails({
     instrumentId: instrumentId!,
     timeRange,
-    page: 1,
-    limit: 180,
+    page: currentPage,
+    limit: itemsPerPage,
     gapFilter,
     minGap: gapRange[0],
     maxGap: gapRange[1],
+    startDate: actualDateRange.startDate,
+    endDate: actualDateRange.endDate,
   });
 
   // Track the currently subscribed symbol to avoid duplicate subscriptions
   const subscribedSymbolRef = useRef<string>('');
+
+  // Track if dates have been initialized to prevent unnecessary API calls
+  const datesInitializedRef = useRef<boolean>(false);
 
   // Subscribe to symbol when connected and during market hours
   useEffect(() => {
@@ -254,11 +300,133 @@ export default function ArbitrageDetailsPage() {
     }
   }, [marketData, symbol]);
 
+  // Calculate min/max dates from filtered data (only once on initial load)
+  useEffect(() => {
+    // Only calculate dates if they haven't been initialized yet
+    if (filteredData && filteredData.length > 0 && !datesInitializedRef.current) {
+      const dates = filteredData.map((row: any) => new Date(row.date)).filter((d) => !isNaN(d.getTime()));
+
+      if (dates.length > 0) {
+        const min = new Date(Math.min(...dates.map(d => d.getTime())));
+        const max = new Date(Math.max(...dates.map(d => d.getTime())));
+
+        // Mark as initialized before setting state
+        datesInitializedRef.current = true;
+
+        // Single state update to prevent multiple re-renders
+        setDateRangeBounds({ minDate: min, maxDate: max });
+      }
+    }
+  }, [filteredData]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [timeRange, gapFilter, gapRange, debouncedDateRange]);
+
   // Manual refresh handler
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await refetch();
     setTimeout(() => setIsRefreshing(false), 500);
+  };
+
+  // Pagination handlers
+  const handleNextPage = () => {
+    if (pagination && pagination.hasMore) {
+      setCurrentPage(prev => prev + 1);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(prev => prev - 1);
+    }
+  };
+
+  const handlePageClick = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Generate page numbers for pagination
+  const getPageNumbers = () => {
+    if (!pagination) return [];
+
+    const totalPages = pagination.totalPages;
+    const current = currentPage;
+    const pageNumbers: (number | string)[] = [];
+
+    if (totalPages <= 7) {
+      // Show all pages if total pages <= 7
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      // Always show first page
+      pageNumbers.push(1);
+
+      if (current > 3) {
+        pageNumbers.push('...');
+      }
+
+      // Show pages around current page
+      const start = Math.max(2, current - 1);
+      const end = Math.min(totalPages - 1, current + 1);
+
+      for (let i = start; i <= end; i++) {
+        pageNumbers.push(i);
+      }
+
+      if (current < totalPages - 2) {
+        pageNumbers.push('...');
+      }
+
+      // Always show last page
+      pageNumbers.push(totalPages);
+    }
+
+    return pageNumbers;
+  };
+
+  // Color palette for symbol groups (subtle, professional colors)
+  const colorPalette = [
+    'bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50',
+    'bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/30 dark:hover:bg-purple-950/50',
+    'bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-950/50',
+    'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50',
+    'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50',
+    'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/30 dark:hover:bg-cyan-950/50',
+    'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/50',
+    'bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/30 dark:hover:bg-teal-950/50',
+  ];
+
+  // Create symbol to color mapping based on Near Future Symbol (symbol_1)
+  const symbolColorMap = useMemo(() => {
+    if (!filteredData || filteredData.length === 0) return new Map<string, string>();
+
+    const map = new Map<string, string>();
+    let colorIndex = 0;
+    let previousSymbol: string | null = null;
+
+    filteredData.forEach((row: any) => {
+      const currentSymbol = row.symbol_1 || 'N/A';
+
+      // If this is a new symbol group, assign a new color
+      if (currentSymbol !== previousSymbol && !map.has(currentSymbol)) {
+        map.set(currentSymbol, colorPalette[colorIndex % colorPalette.length]);
+        colorIndex++;
+        previousSymbol = currentSymbol;
+      } else if (!map.has(currentSymbol)) {
+        map.set(currentSymbol, colorPalette[colorIndex % colorPalette.length]);
+      }
+    });
+
+    return map;
+  }, [filteredData]);
+
+  // Helper function to get row color based on symbol
+  const getRowColor = (symbol: string) => {
+    return symbolColorMap.get(symbol) || '';
   };
 
   // Format number helper
@@ -449,7 +617,7 @@ export default function ArbitrageDetailsPage() {
           {/* Filters */}
           <Card>
             <CardContent className="mt-6">
-              <div className="grid gap-6 md:grid-cols-3">
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {/* Time Range Toggle */}
                 <div className="space-y-4">
                   <Label className="text-sm font-medium">Data Trend</Label>
@@ -487,35 +655,104 @@ export default function ArbitrageDetailsPage() {
                 <div className="space-y-4">
                   <Label className="text-sm font-medium">Gap Range</Label>
                   <div className="space-y-4">
-                    <div className="relative px-3">
-                      <Slider
-                        value={gapRange}
-                        onValueChange={(value) => setGapRange(value as [number, number])}
-                        min={-100}
-                        max={100}
-                        step={1}
-                        className="w-full 
-                          [&_[role=slider]]:h-5 
-                          [&_[role=slider]]:w-5 
-                          [&_[role=slider]]:border-2 
-                          [&_[role=slider]]:border-primary 
-                          [&_[role=slider]]:bg-background 
-                          [&_[role=slider]]:shadow-lg 
-                          [&>.relative]:h-2 
-                          [&_.bg-primary]:bg-primary"
-                      />
+                    <div className="relative w-full px-3">
+      {/* Slider */}
+      <div className="relative">
+        <Slider
+          value={gapRange}
+          onValueChange={(value) => setGapRange(value as [number, number])}
+          min={-100}
+          max={100}
+          step={1}
+          className="w-full 
+            [&_[role=slider]]:h-5 
+            [&_[role=slider]]:w-5 
+            [&_[role=slider]]:border-2 
+            [&_[role=slider]]:border-primary 
+            [&_[role=slider]]:bg-background 
+            [&_[role=slider]]:shadow-lg 
+            [&>.relative]:h-2 
+            [&_.bg-primary]:bg-primary"
+        />
 
-                      {/* ✅ Static scale labels */}
-                      <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                        <span>-100</span>
-                        <span>0</span>
-                        <span>+100</span>
+        {/* Dynamic value bubbles */}
+        {gapRange.map((val, idx) => (
+          <div
+            key={idx}
+            className="absolute -top-8 transform -translate-x-1/2 text-xs font-medium text-primary"
+            style={{
+              left: `${((val + 100) / 200) * 100}%`, // converts value (-100–100) to %
+            }}
+          >
+            <div className="bg-background px-2 py-0.5 rounded-md shadow-sm">
+              {val}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Scale labels */}
+      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+        <span>-100</span>
+        <span>0</span>
+        <span>+100</span>
+      </div>
+    </div>
+                  </div>
+                </div>
+
+                {/* Date Range Filter */}
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium">Date Range</Label>
+                  <div className="space-y-4">
+                    <div className="relative w-full px-3">
+                      {/* Slider */}
+                      <div className="relative">
+                        <Slider
+                          value={dateRange}
+                          onValueChange={(value) => setDateRange(value as [number, number])}
+                          min={0}
+                          max={100}
+                          step={1}
+                          className="w-full
+                            [&_[role=slider]]:h-5
+                            [&_[role=slider]]:w-5
+                            [&_[role=slider]]:border-2
+                            [&_[role=slider]]:border-primary
+                            [&_[role=slider]]:bg-background
+                            [&_[role=slider]]:shadow-lg
+                            [&>.relative]:h-2
+                            [&_.bg-primary]:bg-primary"
+                          disabled={!dateRangeBounds.minDate || !dateRangeBounds.maxDate}
+                        />
+
+                        {/* Dynamic date bubbles */}
+                        {dateRangeBounds.minDate && dateRangeBounds.maxDate && dateRange.map((val, idx) => {
+                          const totalDays = Math.floor((dateRangeBounds.maxDate!.getTime() - dateRangeBounds.minDate!.getTime()) / (1000 * 60 * 60 * 24));
+                          const dayOffset = Math.floor((val / 100) * totalDays);
+                          const date = new Date(dateRangeBounds.minDate!);
+                          date.setDate(date.getDate() + dayOffset);
+
+                          return (
+                            <div
+                              key={idx}
+                              className="absolute -top-8 transform -translate-x-1/2 text-xs font-medium text-primary"
+                              style={{
+                                left: `${val}%`,
+                              }}
+                            >
+                              <div className="bg-background px-2 py-0.5 rounded-md shadow-sm whitespace-nowrap">
+                                {date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
 
-                      {/* ✅ Dynamic value labels */}
-                      <div className="absolute top-0 left-0 right-0 -translate-y-4 flex justify-between text-xs font-medium text-primary mx-3">
-                        <span>{gapRange[0]}</span>
-                        <span>{gapRange[1]}</span>
+                      {/* Scale labels */}
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>{dateRangeBounds.minDate ? dateRangeBounds.minDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Min'}</span>
+                        <span>{dateRangeBounds.maxDate ? dateRangeBounds.maxDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Max'}</span>
                       </div>
                     </div>
                   </div>
@@ -591,11 +828,11 @@ export default function ArbitrageDetailsPage() {
                   </TableRow>
                 ) : filteredData && filteredData.length > 0 ? (
                   filteredData.map((row: any, idx: number) => (
-                    <TableRow key={idx}>
+                    <TableRow key={idx} className={getRowColor(row.symbol_1 || 'N/A')}>
                       <TableCell className="text-center">
                         {row.date.split("T")[0]}
                       </TableCell>
-                      <TableCell className="text-center">{row.symbol_1 || 'N/A'}</TableCell>
+                      <TableCell className="text-center font-medium">{row.symbol_1 || 'N/A'}</TableCell>
                       <TableCell className="text-center">{row.time_1 || '00:00'}</TableCell>
                       <TableCell className="text-center">{formatNumber(row.price_1)}</TableCell>
                       <TableCell className="text-center">{row.symbol_2 || 'N/A'}</TableCell>
@@ -604,10 +841,10 @@ export default function ArbitrageDetailsPage() {
                       <TableCell className="text-center">{row.symbol_3 || 'N/A'}</TableCell>
                       <TableCell className="text-center">{row.time_3 || '00:00'}</TableCell>
                       <TableCell className="text-center">{formatNumber(row.price_3)}</TableCell>
-                      <TableCell className={row.gap_1 > 0 ? "text-green-600 text-center" : "text-red-600 text-center"}>
+                      <TableCell className={row.gap_1 > 0 ? "text-green-600 text-center font-semibold" : "text-red-600 text-center font-semibold"}>
                         {formatNumber(row.gap_1)}
                       </TableCell>
-                      <TableCell className={row.gap_2 > 0 ? "text-green-600 text-center" : "text-red-600 text-center"}>
+                      <TableCell className={row.gap_2 > 0 ? "text-green-600 text-center font-semibold" : "text-red-600 text-center font-semibold"}>
                         {formatNumber(row.gap_2)}
                       </TableCell>
                     </TableRow>
@@ -623,14 +860,66 @@ export default function ArbitrageDetailsPage() {
             </Table>
           </div>
 
-          {/* Pagination */}
-          {pagination && (
-            <div className="flex items-center justify-between">
+          {/* Pagination Controls */}
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                Showing {filteredData?.length || 0} of {pagination.total} rows
+                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, pagination.total)} of {pagination.total} rows
               </p>
+
+              <div className="flex items-center gap-2">
+                {/* Previous Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePreviousPage}
+                  disabled={currentPage === 1 || loading}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1">
+                  {getPageNumbers().map((pageNum, idx) => (
+                    pageNum === '...' ? (
+                      <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
+                        ...
+                      </span>
+                    ) : (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handlePageClick(pageNum as number)}
+                        disabled={loading}
+                        className="min-w-[40px]"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  ))}
+                </div>
+
+                {/* Next Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleNextPage}
+                  disabled={!pagination.hasMore || loading}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Pagination Info (when only 1 page) */}
+          {pagination && pagination.totalPages === 1 && (
+            <div className="flex items-center justify-center">
               <p className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.totalPages}
+                Showing all {pagination.total} rows
               </p>
             </div>
           )}
