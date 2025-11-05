@@ -63,7 +63,7 @@ export function CoveredCallsView() {
   const [pagination, setPagination] = useState<PaginationInfo>({
     total: 0,
     page: 1,
-    limit: 100,
+    limit: 360,
     totalPages: 0,
     hasMore: false,
   });
@@ -72,10 +72,10 @@ export function CoveredCallsView() {
   const [filters, setFilters] = useState({
     underlying: "",
     optionType: "",
-    otmMin: 0,
-    otmMax: 25,
-    premiumMin: 0,
-    premiumMax: 12,
+    otmMin: -50,
+    otmMax: 50,
+    premiumMin: -50,
+    premiumMax: 50,
   });
 
   // Debounced filters state
@@ -249,14 +249,8 @@ export function CoveredCallsView() {
 
       {/* Filters - Always visible */}
       <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>
-            Filter options based on symbol, type, OTM%, and Premium%
-          </CardDescription>
-        </CardHeader>
         <CardContent>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mt-4">
             {/* Underlying Symbol Filter - Elastic Search */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Underlying Symbol</Label>
@@ -302,9 +296,11 @@ export function CoveredCallsView() {
 
             {/* OTM % Filter - Dual Slider */}
             <div className="space-y-4">
-              <Label className="text-sm font-medium">OTM %</Label>
+              <Label className="text-sm font-medium">OTM Range</Label>
               <div className="space-y-4">
-                <div className="relative px-3">
+                <div className="relative w-full px-3">
+                  {/* Slider */}
+                  <div className="relative">
                   <Slider
                     value={[filters.otmMin, filters.otmMax]}
                     onValueChange={(value) =>
@@ -314,47 +310,41 @@ export function CoveredCallsView() {
                         otmMax: value[1],
                       }))
                     }
-                    min={0}
-                    max={50}
-                    step={0.5}
-                    className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg"
+                      min={-100}
+                      max={100}
+                      step={1}
+                      className="w-full
+                        [&_[role=slider]]:h-5
+                        [&_[role=slider]]:w-5
+                        [&_[role=slider]]:border-2
+                        [&_[role=slider]]:border-primary
+                        [&_[role=slider]]:bg-background
+                        [&_[role=slider]]:shadow-lg
+                        [&>.relative]:h-2
+                        [&_.bg-primary]:bg-primary"
                   />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>0%</span>
-                    <span>25%</span>
-                    <span>50%</span>
+
+                    {/* Dynamic value bubbles */}
+                    {[filters.otmMin, filters.otmMax].map((val, idx) => (
+                      <div
+                        key={idx}
+                        className="absolute -top-8 transform -translate-x-1/2 text-xs font-medium text-primary"
+                        style={{
+                          left: `${((val + 100) / 200) * 100}%`,
+                        }}
+                      >
+                        <div className="bg-background px-2 py-0.5 rounded-md shadow-sm">
+                          {val}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Min</Label>
-                    <Input
-                      type="number"
-                      value={filters.otmMin.toFixed(1)}
-                      onChange={(e) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          otmMin: parseFloat(e.target.value) || 0,
-                        }))
-                      }
-                      className="h-8 text-xs font-mono"
-                      step={0.5}
-                    />
+                    ))}
                   </div>
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input
-                      type="number"
-                      value={filters.otmMax.toFixed(1)}
-                      onChange={(e) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          otmMax: parseFloat(e.target.value) || 25,
-                        }))
-                      }
-                      className="h-8 text-xs font-mono"
-                      step={0.5}
-                    />
+
+                  {/* Scale labels */}
+                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                    <span>-100</span>
+                    <span>0</span>
+                    <span>+100</span>
                   </div>
                 </div>
               </div>
@@ -362,9 +352,11 @@ export function CoveredCallsView() {
 
             {/* Premium % Filter - Dual Slider */}
             <div className="space-y-4">
-              <Label className="text-sm font-medium">Premium %</Label>
+              <Label className="text-sm font-medium">Premium Range</Label>
               <div className="space-y-4">
-                <div className="relative px-3">
+                <div className="relative w-full px-3">
+                  {/* Slider */}
+                  <div className="relative">
                   <Slider
                     value={[filters.premiumMin, filters.premiumMax]}
                     onValueChange={(value) =>
@@ -374,47 +366,41 @@ export function CoveredCallsView() {
                         premiumMax: value[1],
                       }))
                     }
-                    min={0}
-                    max={20}
-                    step={0.1}
-                    className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg"
+                      min={-100}
+                      max={100}
+                      step={1}
+                      className="w-full
+                        [&_[role=slider]]:h-5
+                        [&_[role=slider]]:w-5
+                        [&_[role=slider]]:border-2
+                        [&_[role=slider]]:border-primary
+                        [&_[role=slider]]:bg-background
+                        [&_[role=slider]]:shadow-lg
+                        [&>.relative]:h-2
+                        [&_.bg-primary]:bg-primary"
                   />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>0%</span>
-                    <span>10%</span>
-                    <span>20%</span>
+
+                    {/* Dynamic value bubbles */}
+                    {[filters.premiumMin, filters.premiumMax].map((val, idx) => (
+                      <div
+                        key={idx}
+                        className="absolute -top-8 transform -translate-x-1/2 text-xs font-medium text-primary"
+                        style={{
+                          left: `${((val + 100) / 200) * 100}%`,
+                        }}
+                      >
+                        <div className="bg-background px-2 py-0.5 rounded-md shadow-sm">
+                          {val}
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Min</Label>
-                    <Input
-                      type="number"
-                      value={filters.premiumMin.toFixed(2)}
-                      onChange={(e) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          premiumMin: parseFloat(e.target.value) || 0,
-                        }))
-                      }
-                      className="h-8 text-xs font-mono"
-                      step={0.1}
-                    />
+                    ))}
                   </div>
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input
-                      type="number"
-                      value={filters.premiumMax.toFixed(2)}
-                      onChange={(e) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          premiumMax: parseFloat(e.target.value) || 12,
-                        }))
-                      }
-                      className="h-8 text-xs font-mono"
-                      step={0.1}
-                    />
+
+                  {/* Scale labels */}
+                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                    <span>-100</span>
+                    <span>0</span>
+                    <span>+100</span>
                   </div>
                 </div>
               </div>
@@ -465,7 +451,7 @@ export function CoveredCallsView() {
       {!loading.isLoading && !loading.error && optionContractsData.length > 0 && (
         <>
           {/* Summary Cards */}
-          <div className="grid gap-4 md:grid-cols-6">
+          {/* <div className="grid gap-4 md:grid-cols-6">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Total Contracts</CardTitle>
@@ -564,7 +550,7 @@ export function CoveredCallsView() {
                 </p>
               </CardContent>
             </Card>
-          </div>
+          </div> */}
 
           {/* Options Table */}
           <Card>
