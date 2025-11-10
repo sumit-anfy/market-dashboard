@@ -22,11 +22,14 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2, Search } from "lucide-react";
 import { config } from "@/config/api";
+import { RadioGroup } from "@radix-ui/react-radio-group";
+import { RadioGroupItem } from "./ui/radio-group";
 
 interface CoveredCallData {
   underlyingSymbol: string;
   underlyingPrice: number | null;
   optionSymbol: string;
+  time: string;
   premium: number | null;
   volume: number | null;
   strikePrice: number | null;
@@ -53,7 +56,7 @@ export function CoveredCallsView() {
   const [optionContractsData, setOptionContractsData] = useState<
     CoveredCallData[]
   >([]);
-  const [avgPremium, setAvgPremium] = useState<number>(0);
+  // const [avgPremium, setAvgPremium] = useState<number>(0);
   const [loading, setLoading] = useState<LoadingState>({
     isLoading: true,
     error: null,
@@ -74,12 +77,13 @@ export function CoveredCallsView() {
     optionType: "",
     otmMin: -50,
     otmMax: 50,
-    premiumMin: -50,
-    premiumMax: 50,
+    premiumMin: 0,
+    premiumMax: 25,
   });
 
   // Debounced filters state
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
+  const [optionFilter, setOptionFilter] = useState<"" | "CE" | "PE">("");
 
   // Debounce effect - 300ms delay
   useEffect(() => {
@@ -131,7 +135,7 @@ export function CoveredCallsView() {
 
         if (response.data.success) {
           setOptionContractsData(response.data.data);
-          setAvgPremium(response.data.avg_premium || 0);
+          // setAvgPremium(response.data.avg_premium || 0);
           setPagination({
             total: response.data.total,
             page: response.data.page,
@@ -278,7 +282,25 @@ export function CoveredCallsView() {
             {/* Option Type Filter */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Option Type</Label>
-              <select
+                  <RadioGroup className="flex space-x-2" value={optionFilter} onValueChange={(value: any) => {setOptionFilter(value)
+                    setFilters((prev) => ({
+                    ...prev,
+                    optionType: value,
+                  }))}}>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="" id="both" />
+                      <Label htmlFor="both" className="text-sm font-normal">All</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="CE" id="CE" />
+                      <Label htmlFor="CE" className="text-sm font-normal">Call (CE)</Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="PE" id="PE" />
+                      <Label htmlFor="PE" className="text-sm font-normal">Put (PE)</Label>
+                    </div>
+                  </RadioGroup>
+              {/* <select
                 value={filters.optionType}
                 onChange={(e) =>
                   setFilters((prev) => ({
@@ -291,7 +313,7 @@ export function CoveredCallsView() {
                 <option value="">All</option>
                 <option value="CE">Call (CE)</option>
                 <option value="PE">Put (PE)</option>
-              </select>
+              </select> */}
             </div>
 
             {/* OTM % Filter - Dual Slider */}
@@ -324,25 +346,49 @@ export function CoveredCallsView() {
                         [&_.bg-primary]:bg-primary"
                   />
 
-                    {/* Dynamic value bubbles */}
-                    {[filters.otmMin, filters.otmMax].map((val, idx) => (
+                    {/* Editable value inputs */}
+                    {[
+                      { val: filters.otmMin, key: 'otmMin' },
+                      { val: filters.otmMax, key: 'otmMax' }
+                    ].map((item, idx) => (
                       <div
                         key={idx}
-                        className="absolute -top-8 transform -translate-x-1/2 text-xs font-medium text-primary"
+                        className="absolute -top-8 transform -translate-x-1/2"
                         style={{
-                          left: `${((val + 100) / 200) * 100}%`,
+                          left: `${((item.val + 100) / 200) * 100}%`,
                         }}
                       >
-                        <div className="bg-background px-2 py-0.5 rounded-md shadow-sm">
-                          {val}
+                        <Input
+                          type="text"
+                          pattern="^-?\d+$"
+                          title="Enter digits"
+                          value={item.val}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value) || 0;
+                            if (idx === 0) {
+                              // Min value
+                              setFilters((prev) => ({
+                                ...prev,
+                                otmMin: Math.max(-100, Math.min(value, prev.otmMax))
+                              }));
+                            } else {
+                              // Max value
+                              setFilters((prev) => ({
+                                ...prev,
+                                otmMax: Math.min(100, Math.max(value, prev.otmMin))
+                              }));
+                            }
+                          }}
+                          min={idx === 0 ? -100 : filters.otmMin}
+                          max={idx === 0 ? filters.otmMax : 100}
+                          className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
+                        />
                   </div>
-                </div>
                     ))}
                   </div>
 
                   {/* Scale labels */}
                   <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                    <span>-100</span>
                     <span>0</span>
                     <span>+100</span>
                   </div>
@@ -351,7 +397,7 @@ export function CoveredCallsView() {
             </div>
 
             {/* Premium % Filter - Dual Slider */}
-            <div className="space-y-4">
+            <div className="space-y-8">
               <Label className="text-sm font-medium">Premium Range</Label>
               <div className="space-y-4">
                 <div className="relative w-full px-3">
@@ -366,8 +412,8 @@ export function CoveredCallsView() {
                         premiumMax: value[1],
                       }))
                     }
-                      min={-100}
-                      max={100}
+                      min={0}
+                      max={50}
                       step={1}
                       className="w-full
                         [&_[role=slider]]:h-5
@@ -380,27 +426,51 @@ export function CoveredCallsView() {
                         [&_.bg-primary]:bg-primary"
                   />
 
-                    {/* Dynamic value bubbles */}
-                    {[filters.premiumMin, filters.premiumMax].map((val, idx) => (
+                    {/* Editable value inputs */}
+                    {[
+                      { val: filters.premiumMin, key: 'premiumMin' },
+                      { val: filters.premiumMax, key: 'premiumMax' }
+                    ].map((item, idx) => (
                       <div
                         key={idx}
-                        className="absolute -top-8 transform -translate-x-1/2 text-xs font-medium text-primary"
+                        className="absolute -top-8 transform -translate-x-1/2"
                         style={{
-                          left: `${((val + 100) / 200) * 100}%`,
+                          left: `${((item.val) / 100) * 200}%`,
                         }}
                       >
-                        <div className="bg-background px-2 py-0.5 rounded-md shadow-sm">
-                          {val}
+                        <Input
+                          type="text"
+                          pattern="^\d+$"
+                          title="Enter only digits"
+                          value={item.val}
+                          onChange={(e) => {
+                            const value = parseInt(e.target.value) || 0;
+                            if (idx === 0) {
+                              // Min value
+                              setFilters((prev) => ({
+                                ...prev,
+                                premiumMin: Math.max(0, Math.min(value, prev.premiumMax))
+                              }));
+                            } else {
+                              // Max value
+                              setFilters((prev) => ({
+                                ...prev,
+                                premiumMax: Math.min(50, Math.max(value, prev.premiumMin))
+                              }));
+                            }
+                          }}
+                          min={idx === 0 ? 0 : filters.premiumMin}
+                          max={idx === 0 ? filters.premiumMax : 50}
+                          className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
+                        />
                   </div>
-                </div>
                     ))}
                   </div>
 
                   {/* Scale labels */}
                   <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                    <span>-100</span>
                     <span>0</span>
-                    <span>+100</span>
+                    <span>+50</span>
                   </div>
                 </div>
               </div>
@@ -569,6 +639,9 @@ export function CoveredCallsView() {
                         Underlying
                       </TableHead>
                       <TableHead className="text-center font-semibold">
+                        Time
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
                         Price
                       </TableHead>
                       <TableHead className="text-center font-semibold">
@@ -612,6 +685,9 @@ export function CoveredCallsView() {
                         >
                           <TableCell className="text-center font-medium">
                             {option.underlyingSymbol}
+                          </TableCell>
+                          <TableCell className="text-center font-medium">
+                            {option.time}
                           </TableCell>
                           <TableCell className="text-center font-mono text-base">
                             {formatPrice(option.underlyingPrice)}

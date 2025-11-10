@@ -14,7 +14,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Slider } from '@/components/ui/slider';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, Loader2, Activity } from 'lucide-react';
+import { RefreshCw, Loader2 } from 'lucide-react';
+import { CronStatusCard } from './CronStatusCard';
 
 interface ArbitrageData {
   instrumentId: number;
@@ -24,12 +25,15 @@ interface ArbitrageData {
   nearFutureSymbol: string | null;
   nearFuturePrice: number | null;
   nearFutureVolume: number | null;
+  nearFutureTime: string | null;
   nextFutureSymbol: string | null;
   nextFuturePrice: number | null;
   nextFutureVolume: number | null;
+  nextFutureTime: string | null;
   farFutureSymbol: string | null;
   farFuturePrice: number | null;
   farFutureVolume: number | null;
+  farFutureTime: string | null;
 }
 
 export function ArbitrageView() {
@@ -114,28 +118,38 @@ export function ArbitrageView() {
 
   // Filter data based on gap percentages
   const filteredData = arbitrageData.filter(row => {
+    // Check if at least one gap can be calculated
+    const hasNextNearGap = row.nextFuturePrice && row.nearFuturePrice;
+    const hasFarNextGap = row.farFuturePrice && row.nextFuturePrice;
+    const hasFarNearGap = row.farFuturePrice && row.nearFuturePrice;
+
+    // Exclude rows where ALL three gaps are null/N/A
+    if (!hasNextNearGap && !hasFarNextGap && !hasFarNearGap) {
+      return false;
+    }
+
     // Calculate gaps only if data exists
     let passesNextNearFilter = true;
     let passesFarNextFilter = true;
     let passesFarNearFilter = true;
 
     // Check Next/Near gap filter only if both prices exist
-    if (row.nextFuturePrice && row.nearFuturePrice) {
-      const gapNextNear = calculateGap(row.nextFuturePrice, row.nearFuturePrice, row.underlyingPrice);
+    if (hasNextNearGap) {
+      const gapNextNear = calculateGap(row.nextFuturePrice!, row.nearFuturePrice!, row.underlyingPrice);
       passesNextNearFilter = gapNextNear.gapPercentage >= filters.nextNearMin &&
                              gapNextNear.gapPercentage <= filters.nextNearMax;
     }
 
     // Check Far/Next gap filter only if both prices exist
-    if (row.farFuturePrice && row.nextFuturePrice) {
-      const gapFarNext = calculateGap(row.farFuturePrice, row.nextFuturePrice, row.underlyingPrice);
+    if (hasFarNextGap) {
+      const gapFarNext = calculateGap(row.farFuturePrice!, row.nextFuturePrice!, row.underlyingPrice);
       passesFarNextFilter = gapFarNext.gapPercentage >= filters.farNextMin &&
                             gapFarNext.gapPercentage <= filters.farNextMax;
     }
 
     // Check Far/Near gap filter only if both prices exist
-    if (row.farFuturePrice && row.nearFuturePrice) {
-      const gapFarNear = calculateGap(row.farFuturePrice, row.nearFuturePrice, row.underlyingPrice);
+    if (hasFarNearGap) {
+      const gapFarNear = calculateGap(row.farFuturePrice!, row.nearFuturePrice!, row.underlyingPrice);
       passesFarNearFilter = gapFarNear.gapPercentage >= filters.farNearMin &&
                             gapFarNear.gapPercentage <= filters.farNearMax;
     }
@@ -174,10 +188,13 @@ export function ArbitrageView() {
         date: row.time,
         symbol_1: row.nearFutureSymbol || '',
         price_1: row.nearFuturePrice?.toString() || '',
+        time_1: row.nearFutureTime?.toString() || '',
         symbol_2: row.nextFutureSymbol || '',
         price_2: row.nextFuturePrice?.toString() || '',
+        time_2: row.nextFutureTime?.toString() || '',
         symbol_3: row.farFutureSymbol || '',
         price_3: row.farFuturePrice?.toString() || '',
+        time_3: row.farFutureTime?.toString() || '',
         gap_1: gap1.toString(),
         gap_2: gap2.toString(),
       }).toString();
@@ -215,6 +232,18 @@ export function ArbitrageView() {
         </Button>
       </div>
 
+      {/* Cron Status Card */}
+      <div className='gap-2 grid grid-cols-2 w-full'>
+        <CronStatusCard
+          jobName="loginJob"
+          displayName="Daily Ticks NSE Futures Job"
+        />
+        <CronStatusCard
+          jobName="hourlyTicksNseFutJob"
+          displayName="Hourly Ticks NSE Futures Job"
+        />
+      </div>
+
       {/* Error State */}
       {error && (
         <Card className="border-destructive">
@@ -229,169 +258,198 @@ export function ArbitrageView() {
 
       {/* Filters */}
       <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-          <CardDescription>Filter data based on gap percentages</CardDescription>
-        </CardHeader>
         <CardContent>
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-6 mt-4 md:grid-cols-3">
             {/* Gap (Next/Near) Filter */}
-            <div className="space-y-4">
+            <div className="space-y-8">
               <Label className="text-sm font-medium">Gap (Next/Near) %</Label>
               <div className="space-y-4">
-                <div className="relative px-3">
-                  <Slider
-                    value={[filters.nextNearMin, filters.nextNearMax]}
-                    onValueChange={(value) => setFilters(prev => ({ 
-                      ...prev, 
-                      nextNearMin: value[0], 
-                      nextNearMax: value[1] 
-                    }))}
-                    min={-10}
-                    max={10}
-                    step={0.1}
-                    className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <div className="relative w-full px-3">
+                  <div className="relative">
+                    <Slider
+                      value={[filters.nextNearMin, filters.nextNearMax]}
+                      onValueChange={(value) => setFilters(prev => ({
+                        ...prev,
+                        nextNearMin: value[0],
+                        nextNearMax: value[1]
+                      }))}
+                      min={-10}
+                      max={10}
+                      step={0.1}
+                      className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
+                    />
+
+                    {/* Editable value inputs */}
+                    {[
+                      { val: filters.nextNearMin, key: 'nextNearMin' },
+                      { val: filters.nextNearMax, key: 'nextNearMax' }
+                    ].map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="absolute -top-8 transform -translate-x-1/2"
+                        style={{
+                          left: `${((item.val + 10) / 20) * 100}%`,
+                        }}
+                      >
+                        <Input
+                          type="text"
+                          pattern="^-?\d*\.?\d+$"
+                          title="Enter number"
+                          value={item.val.toFixed(1)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value) || 0;
+                            if (idx === 0) {
+                              setFilters(prev => ({
+                                ...prev,
+                                nextNearMin: Math.max(-10, Math.min(value, prev.nextNearMax))
+                              }));
+                            } else {
+                              setFilters(prev => ({
+                                ...prev,
+                                nextNearMax: Math.min(10, Math.max(value, prev.nextNearMin))
+                              }));
+                            }
+                          }}
+                          className="h-6 w-14 text-xs font-medium text-primary text-center px-1 py-0"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
                     <span>-10%</span>
                     <span>0%</span>
                     <span>+10%</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Min</Label>
-                    <Input
-                      type="number"
-                      value={filters.nextNearMin}
-                      onChange={(e) => setFilters(prev => ({ 
-                        ...prev, 
-                        nextNearMin: parseFloat(e.target.value) || -10 
-                      }))}
-                      className="h-8 text-xs font-mono"
-                      step={0.1}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input
-                      type="number"
-                      value={filters.nextNearMax}
-                      onChange={(e) => setFilters(prev => ({ 
-                        ...prev, 
-                        nextNearMax: parseFloat(e.target.value) || 10 
-                      }))}
-                      className="h-8 text-xs font-mono"
-                      step={0.1}
-                    />
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Gap (Far/Next) Filter */}
-            <div className="space-y-4">
+            <div className="space-y-8">
               <Label className="text-sm font-medium">Gap (Far/Next) %</Label>
               <div className="space-y-4">
-                <div className="relative px-3">
-                  <Slider
-                    value={[filters.farNextMin, filters.farNextMax]}
-                    onValueChange={(value) => setFilters(prev => ({ 
-                      ...prev, 
-                      farNextMin: value[0], 
-                      farNextMax: value[1] 
-                    }))}
-                    min={-10}
-                    max={10}
-                    step={0.1}
-                    className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <div className="relative w-full px-3">
+                  <div className="relative">
+                    <Slider
+                      value={[filters.farNextMin, filters.farNextMax]}
+                      onValueChange={(value) => setFilters(prev => ({
+                        ...prev,
+                        farNextMin: value[0],
+                        farNextMax: value[1]
+                      }))}
+                      min={-10}
+                      max={10}
+                      step={0.1}
+                      className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
+                    />
+
+                    {/* Editable value inputs */}
+                    {[
+                      { val: filters.farNextMin, key: 'farNextMin' },
+                      { val: filters.farNextMax, key: 'farNextMax' }
+                    ].map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="absolute -top-8 transform -translate-x-1/2"
+                        style={{
+                          left: `${((item.val + 10) / 20) * 100}%`,
+                        }}
+                      >
+                        <Input
+                          type="text"
+                          pattern="^-?\d*\.?\d+$"
+                          title="Enter number"
+                          value={item.val.toFixed(1)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value) || 0;
+                            if (idx === 0) {
+                              setFilters(prev => ({
+                                ...prev,
+                                farNextMin: Math.max(-10, Math.min(value, prev.farNextMax))
+                              }));
+                            } else {
+                              setFilters(prev => ({
+                                ...prev,
+                                farNextMax: Math.min(10, Math.max(value, prev.farNextMin))
+                              }));
+                            }
+                          }}
+                          className="h-6 w-14 text-xs font-medium text-primary text-center px-1 py-0"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
                     <span>-10%</span>
                     <span>0%</span>
                     <span>+10%</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Min</Label>
-                    <Input
-                      type="number"
-                      value={filters.farNextMin}
-                      onChange={(e) => setFilters(prev => ({ 
-                        ...prev, 
-                        farNextMin: parseFloat(e.target.value) || -10 
-                      }))}
-                      className="h-8 text-xs font-mono"
-                      step={0.1}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input
-                      type="number"
-                      value={filters.farNextMax}
-                      onChange={(e) => setFilters(prev => ({ 
-                        ...prev, 
-                        farNextMax: parseFloat(e.target.value) || 10 
-                      }))}
-                      className="h-8 text-xs font-mono"
-                      step={0.1}
-                    />
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Gap (Far/Near) Filter */}
-            <div className="space-y-4">
+            <div className="space-y-8">
               <Label className="text-sm font-medium">Gap (Far/Near) %</Label>
               <div className="space-y-4">
-                <div className="relative px-3">
-                  <Slider
-                    value={[filters.farNearMin, filters.farNearMax]}
-                    onValueChange={(value) => setFilters(prev => ({ 
-                      ...prev, 
-                      farNearMin: value[0], 
-                      farNearMax: value[1] 
-                    }))}
-                    min={-10}
-                    max={10}
-                    step={0.1}
-                    className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <div className="relative w-full px-3">
+                  <div className="relative">
+                    <Slider
+                      value={[filters.farNearMin, filters.farNearMax]}
+                      onValueChange={(value) => setFilters(prev => ({
+                        ...prev,
+                        farNearMin: value[0],
+                        farNearMax: value[1]
+                      }))}
+                      min={-10}
+                      max={10}
+                      step={0.1}
+                      className="w-full [&_[role=slider]]:h-5 [&_[role=slider]]:w-5 [&_[role=slider]]:border-2 [&_[role=slider]]:border-primary [&_[role=slider]]:bg-background [&_[role=slider]]:shadow-lg [&>.relative]:h-2 [&_.bg-primary]:bg-primary"
+                    />
+
+                    {/* Editable value inputs */}
+                    {[
+                      { val: filters.farNearMin, key: 'farNearMin' },
+                      { val: filters.farNearMax, key: 'farNearMax' }
+                    ].map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="absolute -top-8 transform -translate-x-1/2"
+                        style={{
+                          left: `${((item.val + 10) / 20) * 100}%`,
+                        }}
+                      >
+                        <Input
+                          type="text"
+                          pattern="^-?\d*\.?\d+$"
+                          title="Enter number"
+                          value={item.val.toFixed(1)}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value) || 0;
+                            if (idx === 0) {
+                              setFilters(prev => ({
+                                ...prev,
+                                farNearMin: Math.max(-10, Math.min(value, prev.farNearMax))
+                              }));
+                            } else {
+                              setFilters(prev => ({
+                                ...prev,
+                                farNearMax: Math.min(10, Math.max(value, prev.farNearMin))
+                              }));
+                            }
+                          }}
+                          className="h-6 w-14 text-xs font-medium text-primary text-center px-1 py-0"
+                        />
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
                     <span>-10%</span>
                     <span>0%</span>
                     <span>+10%</span>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Min</Label>
-                    <Input
-                      type="number"
-                      value={filters.farNearMin}
-                      onChange={(e) => setFilters(prev => ({ 
-                        ...prev, 
-                        farNearMin: parseFloat(e.target.value) || -10 
-                      }))}
-                      className="h-8 text-xs font-mono"
-                      step={0.1}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <Label className="text-xs text-muted-foreground">Max</Label>
-                    <Input
-                      type="number"
-                      value={filters.farNearMax}
-                      onChange={(e) => setFilters(prev => ({ 
-                        ...prev, 
-                        farNearMax: parseFloat(e.target.value) || 10 
-                      }))}
-                      className="h-8 text-xs font-mono"
-                      step={0.1}
-                    />
                   </div>
                 </div>
               </div>
@@ -448,7 +506,7 @@ export function ArbitrageView() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedData.map((row, index) => {
+                  paginatedData.map((row: ArbitrageData, index) => {
                     // Calculate gaps only if data exists
                     const gapNextNear = (row.nextFuturePrice && row.nearFuturePrice)
                       ? calculateGap(row.nextFuturePrice, row.nearFuturePrice, row.underlyingPrice)
@@ -467,16 +525,19 @@ export function ArbitrageView() {
                         onClick={() => handleRowClick(row)}
                       >
                         <TableCell className="text-center font-medium">
-                          <div className="flex items-center justify-center gap-2">
-                            {row.underlyingSymbol}
-                            <Activity className="h-4 w-4 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <div className="flex items-center justify-center flex-col">
+                            <div>{row.underlyingSymbol}</div><div className='text-xs'>({row.time.split(" ")[1]+row.time.split(" ")[2]})</div>
+                            {/* <Activity className="h-4 w-4 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" /> */}
                           </div>
                         </TableCell>
                         <TableCell className="text-center font-mono text-base">
                           {formatPrice(row.underlyingPrice)}
                         </TableCell>
-                        <TableCell className="text-center text-sm text-muted-foreground">
-                          {row.nearFutureSymbol || 'N/A'}
+                        <TableCell className="text-center text-sm text-muted-foreground flex flex-col">
+                          <div>{row.nearFutureSymbol || 'N/A'}</div>
+                          <div className='text-xs'>
+                            ({row.nearFutureTime ? row.nearFutureTime.split(" ")[1] + row.nearFutureTime.split(" ")[2] : '00:00'})
+                          </div>
                         </TableCell>
                         <TableCell className="text-center font-mono text-base">
                           {row.nearFuturePrice ? formatPrice(row.nearFuturePrice) : 'N/A'}
@@ -484,8 +545,11 @@ export function ArbitrageView() {
                         <TableCell className="text-center font-mono text-sm">
                           {row.nearFutureVolume ? formatVolume(row.nearFutureVolume) : 'N/A'}
                         </TableCell>
-                        <TableCell className="text-center text-sm text-muted-foreground">
-                          {row.nextFutureSymbol || 'N/A'}
+                        <TableCell className="text-center text-sm text-muted-foreground flex flex-col">
+                          <div>{row.nextFutureSymbol || 'N/A'}</div>
+                          <div className='text-xs'>
+                            ({row.nextFutureTime ? row.nextFutureTime.split(" ")[1] + row.nextFutureTime.split(" ")[2] : '00:00'})
+                          </div>
                         </TableCell>
                         <TableCell className="text-center font-mono text-base">
                           {row.nextFuturePrice ? formatPrice(row.nextFuturePrice) : 'N/A'}
@@ -493,8 +557,11 @@ export function ArbitrageView() {
                         <TableCell className="text-center font-mono text-sm">
                           {row.nextFutureVolume ? formatVolume(row.nextFutureVolume) : 'N/A'}
                         </TableCell>
-                        <TableCell className="text-center text-sm text-muted-foreground">
-                          {row.farFutureSymbol || 'N/A'}
+                        <TableCell className="text-center text-sm text-muted-foreground flex flex-col">
+                          <div>{row.farFutureSymbol || 'N/A'}</div>
+                          <div className='text-xs'>
+                            ({row.farFutureTime ? row.farFutureTime.split(" ")[1] + row.farFutureTime.split(" ")[2] : '00:00'})
+                          </div>
                         </TableCell>
                         <TableCell className="text-center font-mono text-base">
                           {row.farFuturePrice ? formatPrice(row.farFuturePrice) : 'N/A'}

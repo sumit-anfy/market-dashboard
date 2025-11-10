@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { CronStatusCard } from "@/components/CronStatusCard";
 import { Slider } from "@/components/ui/slider";
 import {
   Table,
@@ -107,8 +109,8 @@ export default function ArbitrageDetailsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(360);
-  const [dateRange, setDateRange] = useState<[number, number]>([0, 100]); // Percentage-based (UI state)
-  const [debouncedDateRange, setDebouncedDateRange] = useState<[number, number]>([0, 100]); // Debounced for API
+  const [selectedStartDate, setSelectedStartDate] = useState<string>('');
+  const [selectedEndDate, setSelectedEndDate] = useState<string>('');
   const [dateRangeBounds, setDateRangeBounds] = useState<{ minDate: Date | null; maxDate: Date | null }>({
     minDate: null,
     maxDate: null,
@@ -162,39 +164,18 @@ export default function ArbitrageDetailsPage() {
   // WebSocket connection for live data
   const { isConnected, marketData, marketDataHistory, subscribeToSymbols, unsubscribeFromSymbols } = useSocketIO();
 
-  // Debounce date range changes (500ms delay)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedDateRange(dateRange);
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [dateRange]);
-
-  // Calculate actual date range from percentage slider (using debounced value)
+  // Calculate actual date range from selected dates
   const actualDateRange = useMemo(() => {
-    const { minDate, maxDate } = dateRangeBounds;
-
-    // If dates haven't been set yet, or if range is at full (0-100), don't filter by date
-    if (!minDate || !maxDate || (debouncedDateRange[0] === 0 && debouncedDateRange[1] === 100)) {
+    // If no dates selected, don't filter by date
+    if (!selectedStartDate && !selectedEndDate) {
       return { startDate: undefined, endDate: undefined };
     }
 
-    const totalDays = Math.floor((maxDate.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
-    const startDayOffset = Math.floor((debouncedDateRange[0] / 100) * totalDays);
-    const endDayOffset = Math.floor((debouncedDateRange[1] / 100) * totalDays);
-
-    const startDate = new Date(minDate);
-    startDate.setDate(startDate.getDate() + startDayOffset);
-
-    const endDate = new Date(minDate);
-    endDate.setDate(endDate.getDate() + endDayOffset);
-
     return {
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0],
+      startDate: selectedStartDate || undefined,
+      endDate: selectedEndDate || undefined,
     };
-  }, [dateRangeBounds, debouncedDateRange]);
+  }, [selectedStartDate, selectedEndDate]);
 
   // Fetch filtered arbitrage data
   const {
@@ -322,7 +303,7 @@ export default function ArbitrageDetailsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [timeRange, gapFilter, gapRange, debouncedDateRange]);
+  }, [timeRange, gapFilter, gapRange, selectedStartDate, selectedEndDate]);
 
   // Manual refresh handler
   const handleRefresh = async () => {
@@ -473,6 +454,18 @@ export default function ArbitrageDetailsPage() {
       </div>
 
       <Separator />
+
+      {/* Cron Status Card */}
+      <div className='gap-2 grid grid-cols-2 w-full'>
+        <CronStatusCard
+          jobName="loginJob"
+          displayName="Daily Ticks NSE Futures Job"
+        />
+        <CronStatusCard
+          jobName="hourlyTicksNseFutJob"
+          displayName="Hourly Ticks NSE Futures Job"
+        />
+      </div>
 
       {/* Section 1: Selected Row Data */}
       <Card>
@@ -675,18 +668,36 @@ export default function ArbitrageDetailsPage() {
             [&_.bg-primary]:bg-primary"
         />
 
-        {/* Dynamic value bubbles */}
+        {/* Editable value inputs */}
         {gapRange.map((val, idx) => (
           <div
             key={idx}
-            className="absolute -top-8 transform -translate-x-1/2 text-xs font-medium text-primary"
+            className="absolute -top-8 transform -translate-x-1/2"
             style={{
               left: `${((val + 100) / 200) * 100}%`, // converts value (-100–100) to %
             }}
           >
-            <div className="bg-background px-2 py-0.5 rounded-md shadow-sm">
-              {val}
-            </div>
+            <Input
+              type="text"
+              pattern="^-?\d+$"
+              title="Enter digits"
+              value={val}
+              onChange={(e) => {
+                const value = parseInt(e.target.value) || 0;
+                const newRange: [number, number] = [...gapRange] as [number, number];
+                if (idx === 0) {
+                  // Min value
+                  newRange[0] = Math.max(-100, Math.min(value, gapRange[1]));
+                } else {
+                  // Max value
+                  newRange[1] = Math.min(100, Math.max(value, gapRange[0]));
+                }
+                setGapRange(newRange);
+              }}
+              min={idx === 0 ? -100 : gapRange[0]}
+              max={idx === 0 ? gapRange[1] : 100}
+              className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
+            />
           </div>
         ))}
       </div>
@@ -704,57 +715,36 @@ export default function ArbitrageDetailsPage() {
                 {/* Date Range Filter */}
                 <div className="space-y-4">
                   <Label className="text-sm font-medium">Date Range</Label>
-                  <div className="space-y-4">
-                    <div className="relative w-full px-3">
-                      {/* Slider */}
-                      <div className="relative">
-                        <Slider
-                          value={dateRange}
-                          onValueChange={(value) => setDateRange(value as [number, number])}
-                          min={0}
-                          max={100}
-                          step={1}
-                          className="w-full
-                            [&_[role=slider]]:h-5
-                            [&_[role=slider]]:w-5
-                            [&_[role=slider]]:border-2
-                            [&_[role=slider]]:border-primary
-                            [&_[role=slider]]:bg-background
-                            [&_[role=slider]]:shadow-lg
-                            [&>.relative]:h-2
-                            [&_.bg-primary]:bg-primary"
-                          disabled={!dateRangeBounds.minDate || !dateRangeBounds.maxDate}
+                  <div className="space-y-2">
+                    <div className="flex gap-2 items-center px-3">
+                      <div className="flex-1">
+                        <Label className="text-xs text-muted-foreground">From</Label>
+                        <Input
+                          type="date"
+                          value={selectedStartDate}
+                          onChange={(e) => setSelectedStartDate(e.target.value)}
+                          min={dateRangeBounds.minDate ? dateRangeBounds.minDate.toISOString().split('T')[0] : undefined}
+                          max={selectedEndDate || (dateRangeBounds.maxDate ? dateRangeBounds.maxDate.toISOString().split('T')[0] : undefined)}
+                          className="h-9 text-xs"
                         />
-
-                        {/* Dynamic date bubbles */}
-                        {dateRangeBounds.minDate && dateRangeBounds.maxDate && dateRange.map((val, idx) => {
-                          const totalDays = Math.floor((dateRangeBounds.maxDate!.getTime() - dateRangeBounds.minDate!.getTime()) / (1000 * 60 * 60 * 24));
-                          const dayOffset = Math.floor((val / 100) * totalDays);
-                          const date = new Date(dateRangeBounds.minDate!);
-                          date.setDate(date.getDate() + dayOffset);
-
-                          return (
-                            <div
-                              key={idx}
-                              className="absolute -top-8 transform -translate-x-1/2 text-xs font-medium text-primary"
-                              style={{
-                                left: `${val}%`,
-                              }}
-                            >
-                              <div className="bg-background px-2 py-0.5 rounded-md shadow-sm whitespace-nowrap">
-                                {date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-                              </div>
-                            </div>
-                          );
-                        })}
                       </div>
-
-                      {/* Scale labels */}
-                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                        <span>{dateRangeBounds.minDate ? dateRangeBounds.minDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Min'}</span>
-                        <span>{dateRangeBounds.maxDate ? dateRangeBounds.maxDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Max'}</span>
+                      <div className="flex-1">
+                        <Label className="text-xs text-muted-foreground">To</Label>
+                        <Input
+                          type="date"
+                          value={selectedEndDate}
+                          onChange={(e) => setSelectedEndDate(e.target.value)}
+                          min={selectedStartDate || (dateRangeBounds.minDate ? dateRangeBounds.minDate.toISOString().split('T')[0] : undefined)}
+                          max={dateRangeBounds.maxDate ? dateRangeBounds.maxDate.toISOString().split('T')[0] : undefined}
+                          className="h-9 text-xs"
+                        />
                       </div>
                     </div>
+                    {dateRangeBounds.minDate && dateRangeBounds.maxDate && (
+                      <div className="flex justify-between text-xs text-muted-foreground px-3">
+                        <span>Available: {dateRangeBounds.minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - {dateRangeBounds.maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
