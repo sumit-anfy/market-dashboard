@@ -429,8 +429,8 @@ export default function ArbitrageDetailsPage() {
                     Far Future Symbol
                   </TableHead>
                   <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">Gap</TableHead>
-                  <TableHead className="text-center">Gap</TableHead>
+                  <TableHead className="text-center">Gap (Near & Next)</TableHead>
+                  <TableHead className="text-center">Gap (Next & Far)</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
