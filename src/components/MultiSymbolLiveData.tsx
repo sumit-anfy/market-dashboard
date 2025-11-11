@@ -354,16 +354,8 @@ export function MultiSymbolLiveData({
           </div>
         </div>
         {!isMarketOpen && (
-          <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-blue-600" />
-              <p className="text-sm text-blue-800 font-medium">
-                {MarketHoursManager.getMarketStatus() === "weekend"
-                  ? "Market is closed for the weekend"
-                  : "Market is currently closed"}
-              </p>
-            </div>
-            <p className="text-xs text-blue-600 mt-1">
+          <div className="mt-2 text-center">
+            <p className="text-sm text-black mt-1">
               Live market data is available during market hours (9:00 AM - 4:00
               PM IST, Monday-Friday)
             </p>
@@ -466,18 +458,19 @@ export function MultiSymbolLiveData({
           </>
         ) : (
           // Market closed state
-          <div className="text-center py-8 text-muted-foreground">
-            <div className="space-y-2">
-              <p className="text-lg font-medium">Market is currently closed</p>
-              <p className="text-sm">
-                Live data will be available during market hours (9:00 AM - 4:00
-                PM IST)
-              </p>
-              {symbols.length > 0 && (
-                <p className="text-xs mt-4">Symbols: {symbols.join(", ")}</p>
-              )}
-            </div>
-          </div>
+          // <div className="text-center py-8 text-muted-foreground">
+          //   <div className="space-y-2">
+          //     <p className="text-lg font-medium">Market is currently closed</p>
+          //     <p className="text-sm">
+          //       Live data will be available during market hours (9:00 AM - 4:00
+          //       PM IST)
+          //     </p>
+          //     {symbols.length > 0 && (
+          //       <p className="text-xs mt-4">Symbols: {symbols.join(", ")}</p>
+          //     )}
+          //   </div>
+          // </div>
+          <></>
         )}
       </CardContent>
     </Card>
