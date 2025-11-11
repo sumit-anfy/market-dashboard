@@ -62,7 +62,7 @@ export function SymbolOHLCTable({
             <div className="mb-2">
               <TrendingUp className="h-8 w-8 mx-auto text-gray-300" />
             </div>
-            <p className="text-sm font-medium">No OHLC data available</p>
+            <p className="text-sm font-medium">No Ask & Bid data available</p>
             <p className="text-xs mt-1">
               Data will appear here once market updates are received
             </p>

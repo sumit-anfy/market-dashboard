@@ -741,21 +741,21 @@ export default function ArbitrageDetailsPage() {
                   <TableHead className="text-center">
                     Near Future Symbol
                   </TableHead>
-                  <TableHead className="text-center">
+                  {timeRange == "hour" && <TableHead className="text-center">
                     Near Future Time
-                  </TableHead>
+                  </TableHead>}
                   <TableHead className="text-center">Price</TableHead>
                   <TableHead className="text-center">
                     Next Future Symbol
                   </TableHead>
-                  <TableHead className="text-center">
+                  {timeRange == "hour" && <TableHead className="text-center">
                     Next Future Time
-                  </TableHead>
+                  </TableHead>}
                   <TableHead className="text-center">Price</TableHead>
                   <TableHead className="text-center">
                     Far Future Symbol
                   </TableHead>
-                  <TableHead className="text-center">Far Future Time</TableHead>
+                  {timeRange == "hour" && <TableHead className="text-center">Far Future Time</TableHead>}
                   <TableHead className="text-center">Price</TableHead>
                   <TableHead className="text-center">
                     Gap (Near & Next)
@@ -790,27 +790,27 @@ export default function ArbitrageDetailsPage() {
                       <TableCell className="text-center font-medium">
                         {row.symbol_1 || "N/A"}
                       </TableCell>
-                      <TableCell className="text-center">
+                      {timeRange == "hour" && <TableCell className="text-center">
                         {row.time_1 || "00:00"}
-                      </TableCell>
+                      </TableCell>}
                       <TableCell className="text-center">
                         {formatNumber(row.price_1)}
                       </TableCell>
                       <TableCell className="text-center">
                         {row.symbol_2 || "N/A"}
                       </TableCell>
-                      <TableCell className="text-center">
+                      {timeRange == "hour" && <TableCell className="text-center">
                         {row.time_2 || "00:00"}
-                      </TableCell>
+                      </TableCell>}
                       <TableCell className="text-center">
                         {formatNumber(row.price_2)}
                       </TableCell>
                       <TableCell className="text-center">
                         {row.symbol_3 || "N/A"}
                       </TableCell>
-                      <TableCell className="text-center">
+                      {timeRange == "hour" && <TableCell className="text-center">
                         {row.time_3 || "00:00"}
-                      </TableCell>
+                      </TableCell>}
                       <TableCell className="text-center">
                         {formatNumber(row.price_3)}
                       </TableCell>
