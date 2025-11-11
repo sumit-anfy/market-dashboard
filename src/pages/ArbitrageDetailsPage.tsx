@@ -1,7 +1,18 @@
 import { useEffect, useState, useMemo, useRef } from "react";
-import { useParams, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  useParams,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router-dom";
+import {
+  ArrowLeft,
+  TrendingUp,
+  TrendingDown,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -19,8 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useSocketIO } from "@/hooks/useSocketIO";
 import { useArbitrageDetails } from "@/hooks/useArbitrageDetails";
+import { MultiSymbolLiveData } from "@/components/MultiSymbolLiveData";
 
 interface LocationState {
   instrumentid: number;
@@ -36,23 +47,7 @@ interface LocationState {
   gap_2: number;
 }
 
-interface LiveDataRow {
-  symbol: string;
-  time: string;
-  ltp: number;
-  volume: number;
-  oi: number;
-  ltq: number;
-  avgTradedPrice: number;
-  tbq: number;
-  tsq: number;
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  totalBuyQty: number;
-  totalSellQty: number;
-}
+// LiveDataRow interface is no longer needed - data is handled by MultiSymbolLiveData
 
 export default function ArbitrageDetailsPage() {
   const { instrumentId } = useParams<{ instrumentId: string; date: string }>();
@@ -62,56 +57,62 @@ export default function ArbitrageDetailsPage() {
 
   // Try to get state from location.state first (for backward compatibility),
   // otherwise parse from URL query parameters
-  const state: LocationState | null = location.state || (() => {
-    const instrumentid = searchParams.get('instrumentid');
-    const name = searchParams.get('name');
-    const date = searchParams.get('date');
-    const symbol_1 = searchParams.get('symbol_1');
-    const time_1 = searchParams.get('time_1');
-    const price_1 = searchParams.get('price_1');
-    const symbol_2 = searchParams.get('symbol_2');
-    const time_2 = searchParams.get('time_2');
-    const price_2 = searchParams.get('price_2');
-    const symbol_3 = searchParams.get('symbol_3');
-    const time_3 = searchParams.get('time_3');
-    const price_3 = searchParams.get('price_3');
-    const gap_1 = searchParams.get('gap_1');
-    const gap_2 = searchParams.get('gap_2');
+  const state: LocationState | null =
+    location.state ||
+    (() => {
+      const instrumentid = searchParams.get("instrumentid");
+      const name = searchParams.get("name");
+      const date = searchParams.get("date");
+      const symbol_1 = searchParams.get("symbol_1");
+      const time_1 = searchParams.get("time_1");
+      const price_1 = searchParams.get("price_1");
+      const symbol_2 = searchParams.get("symbol_2");
+      const time_2 = searchParams.get("time_2");
+      const price_2 = searchParams.get("price_2");
+      const symbol_3 = searchParams.get("symbol_3");
+      const time_3 = searchParams.get("time_3");
+      const price_3 = searchParams.get("price_3");
+      const gap_1 = searchParams.get("gap_1");
+      const gap_2 = searchParams.get("gap_2");
 
-    // Return null if required params are missing
-    if (!instrumentid || !name || !date) {
-      return null;
-    }
+      // Return null if required params are missing
+      if (!instrumentid || !name || !date) {
+        return null;
+      }
 
-    return {
-      instrumentid: parseInt(instrumentid),
-      name,
-      date,
-      symbol_1: symbol_1 || '',
-      time_1,
-      price_1: parseFloat(price_1 || '0'),
-      symbol_2: symbol_2 || '',
-      time_2,
-      price_2: parseFloat(price_2 || '0'),
-      symbol_3: symbol_3 || '',
-      time_3,
-      price_3: parseFloat(price_3 || '0'),
-      gap_1: parseFloat(gap_1 || '0'),
-      gap_2: parseFloat(gap_2 || '0'),
-    };
-  })();
+      return {
+        instrumentid: parseInt(instrumentid),
+        name,
+        date,
+        symbol_1: symbol_1 || "",
+        time_1,
+        price_1: parseFloat(price_1 || "0"),
+        symbol_2: symbol_2 || "",
+        time_2,
+        price_2: parseFloat(price_2 || "0"),
+        symbol_3: symbol_3 || "",
+        time_3,
+        price_3: parseFloat(price_3 || "0"),
+        gap_1: parseFloat(gap_1 || "0"),
+        gap_2: parseFloat(gap_2 || "0"),
+      };
+    })();
 
   // State management
   const [timeRange, setTimeRange] = useState<"day" | "hour">("day");
-  const [gapFilter, setGapFilter] = useState<"both" | "positive" | "negative">("both");
+  const [gapFilter, setGapFilter] = useState<"both" | "positive" | "negative">(
+    "both"
+  );
   const [gapRange, setGapRange] = useState<[number, number]>([-50, 50]);
-  const [liveData, setLiveData] = useState<LiveDataRow[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Live data state is now managed by MultiSymbolLiveData component
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(360);
-  const [selectedStartDate, setSelectedStartDate] = useState<string>('');
-  const [selectedEndDate, setSelectedEndDate] = useState<string>('');
-  const [dateRangeBounds, setDateRangeBounds] = useState<{ minDate: Date | null; maxDate: Date | null }>({
+  const [selectedStartDate, setSelectedStartDate] = useState<string>("");
+  const [selectedEndDate, setSelectedEndDate] = useState<string>("");
+  const [dateRangeBounds, setDateRangeBounds] = useState<{
+    minDate: Date | null;
+    maxDate: Date | null;
+  }>({
     minDate: null,
     maxDate: null,
   });
@@ -120,7 +121,9 @@ export default function ArbitrageDetailsPage() {
   const isMarketHours = useMemo(() => {
     const now = new Date();
     // Convert to IST (UTC+5:30)
-    const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+    const istTime = new Date(
+      now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
     const hours = istTime.getHours();
     const minutes = istTime.getMinutes();
 
@@ -129,7 +132,10 @@ export default function ArbitrageDetailsPage() {
     const marketOpenTime = 9 * 60; // 9:00 AM
     const marketCloseTime = 16 * 60; // 4:00 PM
 
-    return currentTimeInMinutes >= marketOpenTime && currentTimeInMinutes < marketCloseTime;
+    return (
+      currentTimeInMinutes >= marketOpenTime &&
+      currentTimeInMinutes < marketCloseTime
+    );
   }, []);
 
   // Update market hours status every minute
@@ -142,27 +148,31 @@ export default function ArbitrageDetailsPage() {
     // Set up interval to check every minute
     const interval = setInterval(() => {
       const now = new Date();
-      const istTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+      const istTime = new Date(
+        now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+      );
       const hours = istTime.getHours();
       const minutes = istTime.getMinutes();
       const currentTimeInMinutes = hours * 60 + minutes;
       const marketOpenTime = 9 * 60;
       const marketCloseTime = 16 * 60;
 
-      setIsMarketOpen(currentTimeInMinutes >= marketOpenTime && currentTimeInMinutes < marketCloseTime);
+      setIsMarketOpen(
+        currentTimeInMinutes >= marketOpenTime &&
+          currentTimeInMinutes < marketCloseTime
+      );
     }, 60000); // Check every minute
 
     return () => clearInterval(interval);
   }, [isMarketHours]);
 
-  // Get symbol from state (single symbol)
-  const symbol = useMemo(() => {
-    if (!state) return '';
-    return state.name;
+  // Extract three symbols from state for multi-symbol support
+  const symbols = useMemo(() => {
+    if (!state) return [];
+    return [state.symbol_1, state.symbol_2, state.symbol_3].filter(Boolean);
   }, [state]);
 
-  // WebSocket connection for live data
-  const { isConnected, marketData, marketDataHistory, subscribeToSymbols, unsubscribeFromSymbols } = useSocketIO();
+  // Note: WebSocket connections are now managed by MultiSymbolLiveData component
 
   // Calculate actual date range from selected dates
   const actualDateRange = useMemo(() => {
@@ -184,7 +194,6 @@ export default function ArbitrageDetailsPage() {
     error,
     pagination,
     summary,
-    refetch,
   } = useArbitrageDetails({
     instrumentId: instrumentId!,
     timeRange,
@@ -197,99 +206,28 @@ export default function ArbitrageDetailsPage() {
     endDate: actualDateRange.endDate,
   });
 
-  // Track the currently subscribed symbol to avoid duplicate subscriptions
-  const subscribedSymbolRef = useRef<string>('');
-
   // Track if dates have been initialized to prevent unnecessary API calls
   const datesInitializedRef = useRef<boolean>(false);
 
-  // Subscribe to symbol when connected and during market hours
-  useEffect(() => {
-    // Only subscribe during market hours
-    if (!symbol || !isConnected || !isMarketOpen) {
-      // Unsubscribe if market is closed but we were subscribed
-      if (subscribedSymbolRef.current && !isMarketOpen) {
-        console.log('🔕 Unsubscribing - Market closed:', subscribedSymbolRef.current);
-        unsubscribeFromSymbols([subscribedSymbolRef.current]);
-        subscribedSymbolRef.current = '';
-      }
-      return;
-    }
+  // Note: Symbol subscription logic is now handled by MultiSymbolLiveData component
 
-    // Check if we need to subscribe (avoid duplicate subscriptions)
-    if (symbol !== subscribedSymbolRef.current) {
-      // Unsubscribe from old symbol if any
-      if (subscribedSymbolRef.current) {
-        console.log('🔕 Unsubscribing from old symbol:', subscribedSymbolRef.current);
-        unsubscribeFromSymbols([subscribedSymbolRef.current]);
-      }
-
-      // Subscribe to new symbol
-      console.log('🔔 Subscribing to symbol:', symbol);
-      subscribeToSymbols([symbol]);
-      subscribedSymbolRef.current = symbol;
-    }
-
-    // Cleanup: unsubscribe when component unmounts
-    return () => {
-      if (subscribedSymbolRef.current) {
-        console.log('🔕 Unsubscribing on unmount:', subscribedSymbolRef.current);
-        unsubscribeFromSymbols([subscribedSymbolRef.current]);
-        subscribedSymbolRef.current = '';
-      }
-    };
-  }, [symbol, isConnected, isMarketOpen, subscribeToSymbols, unsubscribeFromSymbols]);
-
-  // Update live data from market data
-  useEffect(() => {
-    console.log('🔍 Market Data received:', marketData);
-    console.log('🔍 Market Data History:', marketDataHistory);
-    console.log('🔍 Current Symbol:', symbol);
-
-    if (marketData && symbol) {
-      // Check if marketData has the symbol property and matches our subscribed symbol
-      if (marketData.symbol === symbol) {
-        console.log('✅ Data matches subscribed symbol:', symbol, marketData);
-
-        const newRow: LiveDataRow = {
-          symbol: marketData.symbol || symbol,
-          time: new Date(marketData.timestamp || marketData.time || Date.now()).toLocaleTimeString(),
-          ltp: marketData.ltp || marketData.price || 0,
-          volume: marketData.volume || 0,
-          oi: marketData.oi || 0,
-          ltq: marketData.ltq || 0,
-          avgTradedPrice: marketData.avgTradedPrice || 0,
-          tbq: marketData.tbq || 0,
-          tsq: marketData.tsq || 0,
-          open: marketData.open || 0,
-          high: marketData.high || 0,
-          low: marketData.low || 0,
-          close: marketData.close || 0,
-          totalBuyQty: marketData.totalBuyQty || 0,
-          totalSellQty: marketData.totalSellQty || 0,
-        };
-
-        // Keep only latest 5 rows
-        setLiveData((prev) => {
-          const updated = [newRow, ...prev].slice(0, 5);
-          console.log('📊 Updated live data (latest 5):', updated);
-          return updated;
-        });
-      } else {
-        console.log('⚠️ Symbol mismatch - Expected:', symbol, 'Received:', marketData.symbol);
-      }
-    }
-  }, [marketData, symbol]);
+  // Note: Live data updates are now handled by MultiSymbolLiveData component
 
   // Calculate min/max dates from filtered data (only once on initial load)
   useEffect(() => {
     // Only calculate dates if they haven't been initialized yet
-    if (filteredData && filteredData.length > 0 && !datesInitializedRef.current) {
-      const dates = filteredData.map((row: any) => new Date(row.date)).filter((d) => !isNaN(d.getTime()));
+    if (
+      filteredData &&
+      filteredData.length > 0 &&
+      !datesInitializedRef.current
+    ) {
+      const dates = filteredData
+        .map((row: any) => new Date(row.date))
+        .filter((d) => !isNaN(d.getTime()));
 
       if (dates.length > 0) {
-        const min = new Date(Math.min(...dates.map(d => d.getTime())));
-        const max = new Date(Math.max(...dates.map(d => d.getTime())));
+        const min = new Date(Math.min(...dates.map((d) => d.getTime())));
+        const max = new Date(Math.max(...dates.map((d) => d.getTime())));
 
         // Mark as initialized before setting state
         datesInitializedRef.current = true;
@@ -305,23 +243,18 @@ export default function ArbitrageDetailsPage() {
     setCurrentPage(1);
   }, [timeRange, gapFilter, gapRange, selectedStartDate, selectedEndDate]);
 
-  // Manual refresh handler
-  const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await refetch();
-    setTimeout(() => setIsRefreshing(false), 500);
-  };
+  // Note: Refresh functionality is now handled by MultiSymbolLiveData component
 
   // Pagination handlers
   const handleNextPage = () => {
     if (pagination && pagination.hasMore) {
-      setCurrentPage(prev => prev + 1);
+      setCurrentPage((prev) => prev + 1);
     }
   };
 
   const handlePreviousPage = () => {
     if (currentPage > 1) {
-      setCurrentPage(prev => prev - 1);
+      setCurrentPage((prev) => prev - 1);
     }
   };
 
@@ -347,7 +280,7 @@ export default function ArbitrageDetailsPage() {
       pageNumbers.push(1);
 
       if (current > 3) {
-        pageNumbers.push('...');
+        pageNumbers.push("...");
       }
 
       // Show pages around current page
@@ -359,7 +292,7 @@ export default function ArbitrageDetailsPage() {
       }
 
       if (current < totalPages - 2) {
-        pageNumbers.push('...');
+        pageNumbers.push("...");
       }
 
       // Always show last page
@@ -371,26 +304,27 @@ export default function ArbitrageDetailsPage() {
 
   // Color palette for symbol groups (subtle, professional colors)
   const colorPalette = [
-    'bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50',
-    'bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/30 dark:hover:bg-purple-950/50',
-    'bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-950/50',
-    'bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50',
-    'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50',
-    'bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/30 dark:hover:bg-cyan-950/50',
-    'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/50',
-    'bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/30 dark:hover:bg-teal-950/50',
+    "bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50",
+    "bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/30 dark:hover:bg-purple-950/50",
+    "bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-950/50",
+    "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50",
+    "bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50",
+    "bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/30 dark:hover:bg-cyan-950/50",
+    "bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/50",
+    "bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/30 dark:hover:bg-teal-950/50",
   ];
 
   // Create symbol to color mapping based on Near Future Symbol (symbol_1)
   const symbolColorMap = useMemo(() => {
-    if (!filteredData || filteredData.length === 0) return new Map<string, string>();
+    if (!filteredData || filteredData.length === 0)
+      return new Map<string, string>();
 
     const map = new Map<string, string>();
     let colorIndex = 0;
     let previousSymbol: string | null = null;
 
     filteredData.forEach((row: any) => {
-      const currentSymbol = row.symbol_1 || 'N/A';
+      const currentSymbol = row.symbol_1 || "N/A";
 
       // If this is a new symbol group, assign a new color
       if (currentSymbol !== previousSymbol && !map.has(currentSymbol)) {
@@ -407,7 +341,7 @@ export default function ArbitrageDetailsPage() {
 
   // Helper function to get row color based on symbol
   const getRowColor = (symbol: string) => {
-    return symbolColorMap.get(symbol) || '';
+    return symbolColorMap.get(symbol) || "";
   };
 
   // Format number helper
@@ -420,7 +354,9 @@ export default function ArbitrageDetailsPage() {
       <div className="container mx-auto p-6">
         <Card>
           <CardContent className="p-6">
-            <p className="text-muted-foreground">No data available. Please select a row from the arbitrage table.</p>
+            <p className="text-muted-foreground">
+              No data available. Please select a row from the arbitrage table.
+            </p>
             <Button onClick={() => navigate("/arbitrage")} className="mt-4">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Arbitrage
@@ -445,7 +381,9 @@ export default function ArbitrageDetailsPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <h1 className="text-3xl font-bold tracking-tight">{state.name}</h1>
-            <Badge variant="outline">{new Date(state.date).toLocaleDateString()}</Badge>
+            <Badge variant="outline">
+              {new Date(state.date).toLocaleDateString()}
+            </Badge>
           </div>
           <p className="text-sm text-muted-foreground">
             Instrument ID: {state.instrumentid}
@@ -456,7 +394,7 @@ export default function ArbitrageDetailsPage() {
       <Separator />
 
       {/* Cron Status Card */}
-      <div className='gap-2 grid grid-cols-2 w-full'>
+      <div className="gap-2 grid grid-cols-2 w-full">
         <CronStatusCard
           jobName="loginJob"
           displayName="Daily Ticks NSE Futures Job"
@@ -479,11 +417,17 @@ export default function ArbitrageDetailsPage() {
                 <TableRow>
                   <TableHead className="text-center">Name</TableHead>
                   <TableHead className="text-center">Date</TableHead>
-                  <TableHead className="text-center">Near Future Symbol</TableHead>
+                  <TableHead className="text-center">
+                    Near Future Symbol
+                  </TableHead>
                   <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">Next Future Symbol</TableHead>
+                  <TableHead className="text-center">
+                    Next Future Symbol
+                  </TableHead>
                   <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">Far Future Symbol</TableHead>
+                  <TableHead className="text-center">
+                    Far Future Symbol
+                  </TableHead>
                   <TableHead className="text-center">Price</TableHead>
                   <TableHead className="text-center">Gap</TableHead>
                   <TableHead className="text-center">Gap</TableHead>
@@ -493,16 +437,40 @@ export default function ArbitrageDetailsPage() {
                 <TableRow>
                   <TableCell className="text-center">{state.name}</TableCell>
                   <TableCell className="text-center">{state.date}</TableCell>
-                  <TableCell className="text-center">{state.symbol_1}</TableCell>
-                  <TableCell className="text-center">{formatNumber(state.price_1)}</TableCell>
-                  <TableCell className="text-center">{state.symbol_2}</TableCell>
-                  <TableCell className="text-center">{formatNumber(state.price_2)}</TableCell>
-                  <TableCell className="text-center">{state.symbol_3}</TableCell>
-                  <TableCell className="text-center">{formatNumber(state.price_3)}</TableCell>
-                  <TableCell className={state.gap_1 > 0 ? "text-green-600 text-center" : "text-red-600 text-center"}>
+                  <TableCell className="text-center">
+                    {state.symbol_1}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {formatNumber(state.price_1)}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {state.symbol_2}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {formatNumber(state.price_2)}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {state.symbol_3}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {formatNumber(state.price_3)}
+                  </TableCell>
+                  <TableCell
+                    className={
+                      state.gap_1 > 0
+                        ? "text-green-600 text-center"
+                        : "text-red-600 text-center"
+                    }
+                  >
                     {formatNumber(state.gap_1)}
                   </TableCell>
-                  <TableCell className={state.gap_2 > 0 ? "text-green-600 text-center" : "text-red-600 text-center"}>
+                  <TableCell
+                    className={
+                      state.gap_2 > 0
+                        ? "text-green-600 text-center"
+                        : "text-red-600 text-center"
+                    }
+                  >
                     {formatNumber(state.gap_2)}
                   </TableCell>
                 </TableRow>
@@ -512,94 +480,8 @@ export default function ArbitrageDetailsPage() {
         </CardContent>
       </Card>
 
-      {/* Section 2: Live Data */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Live Market Data</CardTitle>
-            <div className="flex items-center gap-2">
-              {isMarketOpen ? (
-                <>
-                  <Badge variant={isConnected ? "default" : "destructive"}>
-                    {isConnected ? "LIVE" : "OFFLINE"}
-                  </Badge>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                  </Button>
-                </>
-              ) : (
-                <Badge variant="secondary">MARKET CLOSED</Badge>
-              )}
-            </div>
-          </div>
-          {!isMarketOpen && (
-            <CardDescription className="mt-2">
-              Live market data is only available during market hours (9:00 AM - 4:00 PM IST)
-            </CardDescription>
-          )}
-        </CardHeader>
-        
-          {isMarketOpen ? (
-            <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-center">Symbol</TableHead>
-                    <TableHead className="text-center">Time</TableHead>
-                    <TableHead className="text-center">LTP</TableHead>
-                    <TableHead className="text-center">Volume</TableHead>
-                    <TableHead className="text-center">OI</TableHead>
-                    <TableHead className="text-center">LTQ</TableHead>
-                    <TableHead className="text-center">Avg Price</TableHead>
-                    <TableHead className="text-center">TBQ</TableHead>
-                    <TableHead className="text-center">TSQ</TableHead>
-                    <TableHead className="text-center">Open</TableHead>
-                    <TableHead className="text-center">High</TableHead>
-                    <TableHead className="text-center">Low</TableHead>
-                    <TableHead className="text-center">Close</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {liveData.length > 0 ? (
-                    liveData.map((row, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell className="font-medium">{row.symbol}</TableCell>
-                        <TableCell className="text-center">{row.time}</TableCell>
-                        <TableCell className="text-center">{formatNumber(row.ltp)}</TableCell>
-                        <TableCell className="text-center">{row.volume.toLocaleString()}</TableCell>
-                        <TableCell className="text-center">{row.oi.toLocaleString()}</TableCell>
-                        <TableCell className="text-center">{row.ltq.toLocaleString()}</TableCell>
-                        <TableCell className="text-center">{formatNumber(row.avgTradedPrice)}</TableCell>
-                        <TableCell className="text-center">{row.tbq.toLocaleString()}</TableCell>
-                        <TableCell className="text-center">{row.tsq.toLocaleString()}</TableCell>
-                        <TableCell className="text-center">{formatNumber(row.open)}</TableCell>
-                        <TableCell className="text-center">{formatNumber(row.high)}</TableCell>
-                        <TableCell className="text-center">{formatNumber(row.low)}</TableCell>
-                        <TableCell className="text-center">{formatNumber(row.close)}</TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={13} className="text-center text-muted-foreground">
-                        {isConnected ? "Waiting for live data..." : "Disconnected from live feed"}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-        </CardContent>
-          ) : (
-            <div> 
-            </div>
-          )}
-      </Card>
+      {/* Section 2: Enhanced Multi-Symbol Live Data */}
+      <MultiSymbolLiveData symbols={symbols} isMarketOpen={isMarketOpen} />
 
       {/* Section 3: Filtered Query Data */}
       <Card>
@@ -612,52 +494,70 @@ export default function ArbitrageDetailsPage() {
             <CardContent className="mt-6">
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
                 {/* Time Range Toggle */}
-                <div className="space-y-4">
+                <div className="space-y-8">
                   <Label className="text-sm font-medium">Data Trend</Label>
                   <div className="flex items-center space-x-2">
-                    <Label htmlFor="time-range" className="text-sm">Day-wise</Label>
+                    <Label htmlFor="time-range" className="text-sm">
+                      Day-wise
+                    </Label>
                     <Switch
                       id="time-range"
                       checked={timeRange === "hour"}
-                      onCheckedChange={(checked) => setTimeRange(checked ? "hour" : "day")}
+                      onCheckedChange={(checked) =>
+                        setTimeRange(checked ? "hour" : "day")
+                      }
                     />
-                    <Label htmlFor="time-range" className="text-sm">Hour-wise</Label>
+                    <Label htmlFor="time-range" className="text-sm">
+                      Hour-wise
+                    </Label>
                   </div>
                 </div>
 
                 {/* Gap Type Filter */}
-                <div className="space-y-4">
+                <div className="space-y-8">
                   <Label className="text-sm font-medium">Gap Type</Label>
-                  <RadioGroup className="flex space-x-2" value={gapFilter} onValueChange={(value: any) => setGapFilter(value)}>
+                  <RadioGroup
+                    className="flex space-x-2"
+                    value={gapFilter}
+                    onValueChange={(value: any) => setGapFilter(value)}
+                  >
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="both" id="both" />
-                      <Label htmlFor="both" className="text-sm font-normal">All</Label>
+                      <Label htmlFor="both" className="text-sm font-normal">
+                        All
+                      </Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="positive" id="positive" />
-                      <Label htmlFor="positive" className="text-sm font-normal">Positive Only</Label>
+                      <Label htmlFor="positive" className="text-sm font-normal">
+                        Positive Only
+                      </Label>
                     </div>
                     <div className="flex items-center space-x-2">
                       <RadioGroupItem value="negative" id="negative" />
-                      <Label htmlFor="negative" className="text-sm font-normal">Negative Only</Label>
+                      <Label htmlFor="negative" className="text-sm font-normal">
+                        Negative Only
+                      </Label>
                     </div>
                   </RadioGroup>
                 </div>
 
                 {/* Gap Range Filter */}
-                <div className="space-y-4">
+                <div className="space-y-8">
                   <Label className="text-sm font-medium">Gap Range</Label>
                   <div className="space-y-4">
                     <div className="relative w-full px-3">
-      {/* Slider */}
-      <div className="relative">
-        <Slider
-          value={gapRange}
-          onValueChange={(value) => setGapRange(value as [number, number])}
-          min={-100}
-          max={100}
-          step={1}
-          className="w-full 
+                      {/* Slider */}
+                      <div className="relative">
+                        <Slider
+                          value={gapRange}
+                          onValueChange={(value) =>
+                            setGapRange(value as [number, number])
+                          }
+                          min={-100}
+                          max={100}
+                          step={1}
+                          className="w-full 
             [&_[role=slider]]:h-5 
             [&_[role=slider]]:w-5 
             [&_[role=slider]]:border-2 
@@ -666,88 +566,132 @@ export default function ArbitrageDetailsPage() {
             [&_[role=slider]]:shadow-lg 
             [&>.relative]:h-2 
             [&_.bg-primary]:bg-primary"
-        />
+                        />
 
-        {/* Editable value inputs */}
-        {gapRange.map((val, idx) => (
-          <div
-            key={idx}
-            className="absolute -top-8 transform -translate-x-1/2"
-            style={{
-              left: `${((val + 100) / 200) * 100}%`, // converts value (-100–100) to %
-            }}
-          >
-            <Input
-              type="text"
-              pattern="^-?\d+$"
-              title="Enter digits"
-              value={val}
-              onChange={(e) => {
-                const value = parseInt(e.target.value) || 0;
-                const newRange: [number, number] = [...gapRange] as [number, number];
-                if (idx === 0) {
-                  // Min value
-                  newRange[0] = Math.max(-100, Math.min(value, gapRange[1]));
-                } else {
-                  // Max value
-                  newRange[1] = Math.min(100, Math.max(value, gapRange[0]));
-                }
-                setGapRange(newRange);
-              }}
-              min={idx === 0 ? -100 : gapRange[0]}
-              max={idx === 0 ? gapRange[1] : 100}
-              className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
-            />
-          </div>
-        ))}
-      </div>
+                        {/* Editable value inputs */}
+                        {gapRange.map((val, idx) => (
+                          <div
+                            key={idx}
+                            className="absolute -top-8 transform -translate-x-1/2"
+                            style={{
+                              left: `${((val + 100) / 200) * 100}%`, // converts value (-100–100) to %
+                            }}
+                          >
+                            <Input
+                              type="text"
+                              pattern="^-?\d+$"
+                              title="Enter digits"
+                              value={val}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 0;
+                                const newRange: [number, number] = [
+                                  ...gapRange,
+                                ] as [number, number];
+                                if (idx === 0) {
+                                  // Min value
+                                  newRange[0] = Math.max(
+                                    -100,
+                                    Math.min(value, gapRange[1])
+                                  );
+                                } else {
+                                  // Max value
+                                  newRange[1] = Math.min(
+                                    100,
+                                    Math.max(value, gapRange[0])
+                                  );
+                                }
+                                setGapRange(newRange);
+                              }}
+                              min={idx === 0 ? -100 : gapRange[0]}
+                              max={idx === 0 ? gapRange[1] : 100}
+                              className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
+                            />
+                          </div>
+                        ))}
+                      </div>
 
-      {/* Scale labels */}
-      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-        <span>-100</span>
-        <span>0</span>
-        <span>+100</span>
-      </div>
-    </div>
+                      {/* Scale labels */}
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>-100</span>
+                        <span>0</span>
+                        <span>+100</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Date Range Filter */}
                 <div className="space-y-4">
                   <Label className="text-sm font-medium">Date Range</Label>
-                  <div className="space-y-2">
-                    <div className="flex gap-2 items-center px-3">
+                    <div className="flex gap-2 items-center">
                       <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">From</Label>
                         <Input
                           type="date"
                           value={selectedStartDate}
                           onChange={(e) => setSelectedStartDate(e.target.value)}
-                          min={dateRangeBounds.minDate ? dateRangeBounds.minDate.toISOString().split('T')[0] : undefined}
-                          max={selectedEndDate || (dateRangeBounds.maxDate ? dateRangeBounds.maxDate.toISOString().split('T')[0] : undefined)}
+                          min={
+                            dateRangeBounds.minDate
+                              ? dateRangeBounds.minDate
+                                  .toISOString()
+                                  .split("T")[0]
+                              : undefined
+                          }
+                          max={
+                            selectedEndDate ||
+                            (dateRangeBounds.maxDate
+                              ? dateRangeBounds.maxDate
+                                  .toISOString()
+                                  .split("T")[0]
+                              : undefined)
+                          }
                           className="h-9 text-xs"
                         />
                       </div>
+                      <div>to</div>
                       <div className="flex-1">
-                        <Label className="text-xs text-muted-foreground">To</Label>
                         <Input
                           type="date"
                           value={selectedEndDate}
                           onChange={(e) => setSelectedEndDate(e.target.value)}
-                          min={selectedStartDate || (dateRangeBounds.minDate ? dateRangeBounds.minDate.toISOString().split('T')[0] : undefined)}
-                          max={dateRangeBounds.maxDate ? dateRangeBounds.maxDate.toISOString().split('T')[0] : undefined}
+                          min={
+                            selectedStartDate ||
+                            (dateRangeBounds.minDate
+                              ? dateRangeBounds.minDate
+                                  .toISOString()
+                                  .split("T")[0]
+                              : undefined)
+                          }
+                          max={
+                            dateRangeBounds.maxDate
+                              ? dateRangeBounds.maxDate
+                                  .toISOString()
+                                  .split("T")[0]
+                              : undefined
+                          }
                           className="h-9 text-xs"
                         />
                       </div>
                     </div>
                     {dateRangeBounds.minDate && dateRangeBounds.maxDate && (
                       <div className="flex justify-between text-xs text-muted-foreground px-3">
-                        <span>Available: {dateRangeBounds.minDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - {dateRangeBounds.maxDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                        <span>
+                          Available:{" "}
+                          {dateRangeBounds.minDate.toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}{" "}
+                          -{" "}
+                          {dateRangeBounds.maxDate.toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
-              </div>
             </CardContent>
           </Card>
 
@@ -755,7 +699,9 @@ export default function ArbitrageDetailsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Positive Gaps</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Positive Gaps
+                </CardTitle>
                 <TrendingUp className="h-4 w-4 text-green-600" />
               </CardHeader>
               <CardContent>
@@ -770,7 +716,9 @@ export default function ArbitrageDetailsPage() {
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Negative Gaps</CardTitle>
+                <CardTitle className="text-sm font-medium">
+                  Negative Gaps
+                </CardTitle>
                 <TrendingDown className="h-4 w-4 text-red-600" />
               </CardHeader>
               <CardContent>
@@ -790,17 +738,31 @@ export default function ArbitrageDetailsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="text-center">Date</TableHead>
-                  <TableHead className="text-center">Near Future Symbol</TableHead>
-                  <TableHead className="text-center">Near Future Time</TableHead>
+                  <TableHead className="text-center">
+                    Near Future Symbol
+                  </TableHead>
+                  <TableHead className="text-center">
+                    Near Future Time
+                  </TableHead>
                   <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">Next Future Symbol</TableHead>
-                  <TableHead className="text-center">Next Future Time</TableHead>
+                  <TableHead className="text-center">
+                    Next Future Symbol
+                  </TableHead>
+                  <TableHead className="text-center">
+                    Next Future Time
+                  </TableHead>
                   <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">Far Future Symbol</TableHead>
+                  <TableHead className="text-center">
+                    Far Future Symbol
+                  </TableHead>
                   <TableHead className="text-center">Far Future Time</TableHead>
                   <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">Gap (Near & Next)</TableHead>
-                  <TableHead className="text-center">Gap (Next & Far)</TableHead>
+                  <TableHead className="text-center">
+                    Gap (Near & Next)
+                  </TableHead>
+                  <TableHead className="text-center">
+                    Gap (Next & Far)
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -818,30 +780,66 @@ export default function ArbitrageDetailsPage() {
                   </TableRow>
                 ) : filteredData && filteredData.length > 0 ? (
                   filteredData.map((row: any, idx: number) => (
-                    <TableRow key={idx} className={getRowColor(row.symbol_1 || 'N/A')}>
+                    <TableRow
+                      key={idx}
+                      className={getRowColor(row.symbol_1 || "N/A")}
+                    >
                       <TableCell className="text-center">
                         {row.date.split("T")[0]}
                       </TableCell>
-                      <TableCell className="text-center font-medium">{row.symbol_1 || 'N/A'}</TableCell>
-                      <TableCell className="text-center">{row.time_1 || '00:00'}</TableCell>
-                      <TableCell className="text-center">{formatNumber(row.price_1)}</TableCell>
-                      <TableCell className="text-center">{row.symbol_2 || 'N/A'}</TableCell>
-                      <TableCell className="text-center">{row.time_2 || '00:00'}</TableCell>
-                      <TableCell className="text-center">{formatNumber(row.price_2)}</TableCell>
-                      <TableCell className="text-center">{row.symbol_3 || 'N/A'}</TableCell>
-                      <TableCell className="text-center">{row.time_3 || '00:00'}</TableCell>
-                      <TableCell className="text-center">{formatNumber(row.price_3)}</TableCell>
-                      <TableCell className={row.gap_1 > 0 ? "text-green-600 text-center font-semibold" : "text-red-600 text-center font-semibold"}>
+                      <TableCell className="text-center font-medium">
+                        {row.symbol_1 || "N/A"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {row.time_1 || "00:00"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.price_1)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {row.symbol_2 || "N/A"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {row.time_2 || "00:00"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.price_2)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {row.symbol_3 || "N/A"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {row.time_3 || "00:00"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.price_3)}
+                      </TableCell>
+                      <TableCell
+                        className={
+                          row.gap_1 > 0
+                            ? "text-green-600 text-center font-semibold"
+                            : "text-red-600 text-center font-semibold"
+                        }
+                      >
                         {formatNumber(row.gap_1)}
                       </TableCell>
-                      <TableCell className={row.gap_2 > 0 ? "text-green-600 text-center font-semibold" : "text-red-600 text-center font-semibold"}>
+                      <TableCell
+                        className={
+                          row.gap_2 > 0
+                            ? "text-green-600 text-center font-semibold"
+                            : "text-red-600 text-center font-semibold"
+                        }
+                      >
                         {formatNumber(row.gap_2)}
                       </TableCell>
                     </TableRow>
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground">
+                    <TableCell
+                      colSpan={9}
+                      className="text-center text-muted-foreground"
+                    >
                       No data available
                     </TableCell>
                   </TableRow>
@@ -854,7 +852,9 @@ export default function ArbitrageDetailsPage() {
           {pagination && pagination.totalPages > 1 && (
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                Showing {((currentPage - 1) * itemsPerPage) + 1} to {Math.min(currentPage * itemsPerPage, pagination.total)} of {pagination.total} rows
+                Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
+                {Math.min(currentPage * itemsPerPage, pagination.total)} of{" "}
+                {pagination.total} rows
               </p>
 
               <div className="flex items-center gap-2">
@@ -871,15 +871,20 @@ export default function ArbitrageDetailsPage() {
 
                 {/* Page Numbers */}
                 <div className="flex items-center gap-1">
-                  {getPageNumbers().map((pageNum, idx) => (
-                    pageNum === '...' ? (
-                      <span key={`ellipsis-${idx}`} className="px-2 text-muted-foreground">
+                  {getPageNumbers().map((pageNum, idx) =>
+                    pageNum === "..." ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        className="px-2 text-muted-foreground"
+                      >
                         ...
                       </span>
                     ) : (
                       <Button
                         key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
+                        variant={
+                          currentPage === pageNum ? "default" : "outline"
+                        }
                         size="sm"
                         onClick={() => handlePageClick(pageNum as number)}
                         disabled={loading}
@@ -888,7 +893,7 @@ export default function ArbitrageDetailsPage() {
                         {pageNum}
                       </Button>
                     )
-                  ))}
+                  )}
                 </div>
 
                 {/* Next Button */}

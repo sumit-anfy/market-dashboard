@@ -1,7 +1,7 @@
 export interface MarketData {
   id: string;
   symbol: string;
-  segment: 'NSE_EQ' | 'NSE_FO' | 'BSE_EQ';
+  segment: "NSE_EQ" | "NSE_FO" | "BSE_EQ";
   price: number;
   previousClose: number;
   change: number;
@@ -25,6 +25,75 @@ export interface LiveData extends MarketData {
   dayHigh: number;
   dayLow: number;
   totalTradedVolume: number;
+}
+
+// Enhanced interfaces for multi-symbol support
+export interface OHLCData {
+  timestamp: string;
+  bid: number;
+  bidQty: number;
+  ask: number;
+  askQty: number;
+}
+
+export interface SymbolMarketData {
+  symbol: string;
+  ltp: number;
+  volume: number;
+  timestamp: string;
+  ohlcHistory: OHLCData[];
+  status: "connected" | "disconnected" | "error";
+}
+
+export interface MultiSymbolMarketData {
+  [symbol: string]: SymbolMarketData;
+}
+
+export interface SymbolCardData {
+  symbol: string;
+  ltp: number;
+  volume: number;
+  lastUpdated: string;
+  status: "connected" | "disconnected" | "error";
+}
+
+export interface SymbolConnectionStatus {
+  [symbol: string]: "connected" | "disconnected" | "error";
+}
+
+// Component prop interfaces for multi-symbol components
+export interface SymbolCardProps {
+  symbol: string;
+  ltp: number;
+  volume: number;
+  lastUpdated: string;
+  isConnected: boolean;
+  status: "connected" | "disconnected" | "error";
+}
+
+export interface SymbolOHLCTableProps {
+  symbol: string;
+  data: OHLCData[];
+  maxEntries?: number;
+}
+
+export interface MultiSymbolLiveDataProps {
+  symbols: string[];
+  isMarketOpen: boolean;
+}
+
+// Data management interfaces
+export interface OHLCDataManager {
+  addOHLCEntry(symbol: string, data: OHLCData): void;
+  getLatestEntries(symbol: string, count: number): OHLCData[];
+  clearHistory(symbol: string): void;
+}
+
+// Enhanced market data validation
+export interface DataValidator {
+  validateMarketData(data: any): MarketData | null;
+  validateOHLCData(data: any): OHLCData | null;
+  isValidSymbol(symbol: string): boolean;
 }
 
 export interface FilterOptions {
