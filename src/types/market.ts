@@ -108,3 +108,52 @@ export interface FilterOptions {
   minVolume: number | null;
   maxVolume: number | null;
 }
+
+// Covered Calls Detail Page Types
+export interface CoveredCallsDetail {
+  id: number;
+  underlying: string;
+  option_symbol: string;
+  time: string;
+  underlying_price: number;
+  premium: number;
+  volume: number;
+  strike: number;
+  option_type: "CE" | "PE";
+  otm: number;
+  premium_percentage: number;
+  expiry_date: string;
+}
+
+export interface CoveredCallsSymbolExpiry {
+  symbol: string;
+  expiry_date: string;
+  strike: number;
+}
+
+export interface CoveredCallsDetailsPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+export interface CoveredCallsDetailsSummary {
+  ceCount: number;
+  peCount: number;
+  totalCount: number;
+  avgPremiumPercentage: number;
+}
+
+export interface CoveredCallsDetailsResponse {
+  success: boolean;
+  data: CoveredCallsDetail[];
+  pagination: CoveredCallsDetailsPagination;
+  summary: CoveredCallsDetailsSummary;
+}
+
+export interface CoveredCallsSymbolsExpiryResponse {
+  success: boolean;
+  data: CoveredCallsSymbolExpiry[];
+}

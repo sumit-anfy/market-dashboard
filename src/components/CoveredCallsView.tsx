@@ -26,6 +26,7 @@ import { RadioGroup } from "@radix-ui/react-radio-group";
 import { RadioGroupItem } from "./ui/radio-group";
 
 interface CoveredCallData {
+  id: number;
   underlyingSymbol: string;
   underlyingPrice: number | null;
   optionSymbol: string;
@@ -52,6 +53,7 @@ interface PaginationInfo {
 }
 
 export function CoveredCallsView() {
+
   // Data and loading states
   const [optionContractsData, setOptionContractsData] = useState<
     CoveredCallData[]
@@ -256,7 +258,7 @@ export function CoveredCallsView() {
         <CardContent>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mt-4">
             {/* Underlying Symbol Filter - Elastic Search */}
-            <div className="space-y-2">
+            <div className="space-y-4">
               <Label className="text-sm font-medium">Underlying Symbol</Label>
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -280,7 +282,7 @@ export function CoveredCallsView() {
             </div>
 
             {/* Option Type Filter */}
-            <div className="space-y-2">
+            <div className="space-y-6">
               <Label className="text-sm font-medium">Option Type</Label>
                   <RadioGroup className="flex space-x-2" value={optionFilter} onValueChange={(value: any) => {setOptionFilter(value)
                     setFilters((prev) => ({
@@ -317,7 +319,7 @@ export function CoveredCallsView() {
             </div>
 
             {/* OTM % Filter - Dual Slider */}
-            <div className="space-y-4">
+            <div className="space-y-8">
               <Label className="text-sm font-medium">OTM Range</Label>
               <div className="space-y-4">
                 <div className="relative w-full px-3">
@@ -631,7 +633,7 @@ export function CoveredCallsView() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[600px]">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -677,11 +679,28 @@ export function CoveredCallsView() {
                       return (
                         <TableRow
                           key={index}
-                          className={`hover:bg-muted/50 ${
+                          className={`hover:bg-muted/50 cursor-pointer transition-colors ${
                             atmOption
                               ? "bg-blue-50/50 dark:bg-blue-950/20"
                               : ""
                           }`}
+                          onClick={() => {
+                            const url = `/covered-calls-details/${option.id}?` +
+                              new URLSearchParams({
+                                id: String(option.id),
+                                underlyingSymbol: option.underlyingSymbol,
+                                optionSymbol: option.optionSymbol,
+                                time: option.time,
+                                underlyingPrice: String(option.underlyingPrice ?? ''),
+                                premium: String(option.premium ?? ''),
+                                volume: String(option.volume ?? ''),
+                                strikePrice: String(option.strikePrice ?? ''),
+                                optionType: option.optionType,
+                                otm: String(option.otm ?? ''),
+                                premiumPercent: String(option.premiumPercent ?? ''),
+                              }).toString();
+                            window.open(url, '_blank');
+                          }}
                         >
                           <TableCell className="text-center font-medium">
                             {option.underlyingSymbol}

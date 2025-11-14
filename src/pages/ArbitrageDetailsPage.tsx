@@ -314,39 +314,47 @@ export default function ArbitrageDetailsPage() {
     "bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/30 dark:hover:bg-teal-950/50",
   ];
 
-  // Create symbol to color mapping based on Near Future Symbol (symbol_1)
+  // Month key helper (YYYY-MM)
+  const monthKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+  // Create color mapping per month (chronological assignment)
   const symbolColorMap = useMemo(() => {
-    if (!filteredData || filteredData.length === 0)
-      return new Map<string, string>();
+    if (!filteredData?.length) return new Map<string, string>();
 
     const map = new Map<string, string>();
     let colorIndex = 0;
-    let previousSymbol: string | null = null;
 
-    filteredData.forEach((row: any) => {
-      const currentSymbol = row.symbol_1 || "N/A";
+    // Ensure chronological order so months get stable, sequential colors
+    const sorted = [...filteredData].sort(
+      (a: any, b: any) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
 
-      // If this is a new symbol group, assign a new color
-      if (currentSymbol !== previousSymbol && !map.has(currentSymbol)) {
-        map.set(currentSymbol, colorPalette[colorIndex % colorPalette.length]);
+    for (const row of sorted) {
+      const d = new Date(row.date);
+      if (isNaN(d.getTime())) continue;
+      const key = monthKey(d);
+      if (!map.has(key)) {
+        map.set(key, colorPalette[colorIndex % colorPalette.length]);
         colorIndex++;
-        previousSymbol = currentSymbol;
-      } else if (!map.has(currentSymbol)) {
-        map.set(currentSymbol, colorPalette[colorIndex % colorPalette.length]);
       }
-    });
+    }
 
     return map;
-  }, [filteredData]);
+  }, [filteredData, colorPalette]);
 
-  // Helper function to get row color based on symbol
-  const getRowColor = (symbol: string) => {
-    return symbolColorMap.get(symbol) || "";
+  // Helper to get row color based on row date month
+  const getRowColor = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    const key = monthKey(d);
+    return symbolColorMap.get(key) || "";
   };
 
   // Format number helper
   const formatNumber = (num: number, decimals = 2) => {
-    return Number(num).toFixed(decimals) || "0.00";
+    return num !== null ? Number(num).toFixed(decimals) : "-";
   };
 
   if (!state) {
@@ -782,34 +790,34 @@ export default function ArbitrageDetailsPage() {
                   filteredData.map((row: any, idx: number) => (
                     <TableRow
                       key={idx}
-                      className={getRowColor(row.symbol_1 || "N/A")}
+                      className={getRowColor(row.date || "-")}
                     >
                       <TableCell className="text-center">
                         {row.date.split("T")[0]}
                       </TableCell>
                       <TableCell className="text-center font-medium">
-                        {row.symbol_1 || "N/A"}
+                        {row.symbol_1 || "-"}
                       </TableCell>
                       {timeRange == "hour" && <TableCell className="text-center">
-                        {row.time_1 || "00:00"}
+                        {row.time_1 || "-"}
                       </TableCell>}
                       <TableCell className="text-center">
                         {formatNumber(row.price_1)}
                       </TableCell>
-                      <TableCell className="text-center">
-                        {row.symbol_2 || "N/A"}
+                      <TableCell className="text-center font-medium">
+                        {row.symbol_2 || "-"}
                       </TableCell>
                       {timeRange == "hour" && <TableCell className="text-center">
-                        {row.time_2 || "00:00"}
+                        {row.time_2 || "-"}
                       </TableCell>}
                       <TableCell className="text-center">
                         {formatNumber(row.price_2)}
                       </TableCell>
-                      <TableCell className="text-center">
-                        {row.symbol_3 || "N/A"}
+                      <TableCell className="text-center font-medium">
+                        {row.symbol_3 || "-"}
                       </TableCell>
                       {timeRange == "hour" && <TableCell className="text-center">
-                        {row.time_3 || "00:00"}
+                        {row.time_3 || "-"}
                       </TableCell>}
                       <TableCell className="text-center">
                         {formatNumber(row.price_3)}

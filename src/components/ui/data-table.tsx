@@ -8,8 +8,8 @@ interface DataTableProps {
 
 export function DataTable({ children, className }: DataTableProps) {
   return (
-    <div className={cn("rounded-md border", className)}>
-      <div className="relative w-full overflow-auto">
+    <div className={cn("rounded-md border overflow-auto max-h-[600px]", className)}>
+      <div className="relative w-full">
         <table className="w-full caption-bottom text-sm">
           {children}
         </table>
@@ -25,7 +25,7 @@ interface DataTableHeaderProps {
 
 export function DataTableHeader({ children, className }: DataTableHeaderProps) {
   return (
-    <thead className={cn("[&_tr]:border-b", className)}>
+    <thead className={cn("sticky top-0 z-10 bg-background [&_tr]:border-b", className)}>
       {children}
     </thead>
   );

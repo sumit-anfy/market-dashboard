@@ -83,7 +83,7 @@ export function DerivativesDataTable<T extends { symbol: string }>({
             <ScrollArea className="h-[500px]">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-muted/50 border-b sticky top-0">
+                  <thead className="bg-muted/50 border-b sticky top-0 z-10">
                     <tr>
                       {columns.map((column) => (
                         <SortableTableHeader

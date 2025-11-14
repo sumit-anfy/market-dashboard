@@ -150,9 +150,9 @@ export function useSocketIO(
     });
 
     // Connection status from backend
-    socketInstance.on("connection-status", (data) => {
-      console.log("📡 Connection status:", data);
-    });
+    // socketInstance.on("connection-status", (data) => {
+    //   console.log("📡 Connection status:", data);
+    // });
 
     // Market data events with enhanced error handling
     socketInstance.on("market-data", (data: MarketData) => {
@@ -161,7 +161,7 @@ export function useSocketIO(
       // Validate incoming data
       const validatedData = DataValidator.validateMarketData(data);
       if (!validatedData) {
-        console.error("❌ Invalid market data received, skipping:", data);
+        // console.error("❌ Invalid market data received, skipping:", data);
         if (data.symbol) {
           const symbol = data.symbol;
           connectionStatusManager.current.updateSymbolStatus(
@@ -289,7 +289,7 @@ export function useSocketIO(
       // Validate incoming symbol update
       const validatedData = DataValidator.validateMarketData(data);
       if (!validatedData) {
-        console.error("❌ Invalid symbol update received, skipping:", data);
+        // console.error("❌ Invalid symbol update received, skipping:", data);
         if (data.symbol) {
           const symbol = data.symbol;
           connectionStatusManager.current.updateSymbolStatus(
@@ -545,10 +545,10 @@ export function useSocketIO(
           connectionStatusManager.current.getStaleConnections(30000);
 
         if (staleSymbols.length > 0) {
-          console.warn(
-            "⚠️ Detected stale connections for symbols:",
-            staleSymbols
-          );
+          // console.warn(
+          //   "⚠️ Detected stale connections for symbols:",
+          //   staleSymbols
+          // );
 
           staleSymbols.forEach((symbol) => {
             connectionStatusManager.current.updateSymbolStatus(

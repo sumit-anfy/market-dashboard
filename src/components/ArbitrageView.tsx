@@ -466,7 +466,7 @@ export function ArbitrageView() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[600px]">
             <Table>
               <TableHeader>
                 <TableRow>

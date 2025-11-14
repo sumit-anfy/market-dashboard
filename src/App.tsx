@@ -6,6 +6,7 @@ import { LiveDataView } from '@/components/LiveData';
 import { ArbitrageView } from '@/components/ArbitrageView';
 import { CoveredCallsView } from '@/components/CoveredCallsView';
 import ArbitrageDetailsPage from '@/pages/ArbitrageDetailsPage';
+import CoveredCallsDetailsPage from '@/pages/CoveredCallsDetailsPage';
 // import { LiveMarketWatch } from '@/components/LiveMarketWatch';
 
 type View = 'historical' | 'live' | 'arbitrage' | 'covered-calls' | 'live-watch';
@@ -52,6 +53,9 @@ function App() {
     <Routes>
       {/* Arbitrage details page without layout */}
       <Route path="/arbitrage/:instrumentId/:date" element={<ArbitrageDetailsPage />} />
+
+      {/* Covered Calls details page without layout */}
+      <Route path="/covered-calls-details/:instrumentId" element={<CoveredCallsDetailsPage />} />
 
       {/* Main routes with layout */}
       <Route

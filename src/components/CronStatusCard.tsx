@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Activity, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -89,29 +89,26 @@ export function CronStatusCard({ jobName, displayName }: CronStatusCardProps) {
 
   return (
     <Card className="border-l-4 border-l-primary">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {getStatusIcon()}
             <CardTitle className="text-sm font-medium">
-              {displayName || jobName}
+              {displayName || jobName} Status
             </CardTitle>
           </div>
           {getStatusBadge()}
         </div>
-        <CardDescription className="text-xs">
-          Cron Job Status
-        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2 text-xs">
         <div className="flex justify-between items-center">
           <span className="text-muted-foreground">Last Run:</span>
           <span className="font-medium">{formatDate(jobStatus.lastRun)}</span>
         </div>
-        <div className="flex justify-between items-center">
+        {/* <div className="flex justify-between items-center">
           <span className="text-muted-foreground">Next Run:</span>
           <span className="font-medium">{formatDate(jobStatus.nextRun)}</span>
-        </div>
+        </div> */}
         {jobStatus.lastDuration !== null && (
           <div className="flex justify-between items-center">
             <span className="text-muted-foreground">Duration:</span>

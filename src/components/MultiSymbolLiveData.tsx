@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { RefreshCw, AlertTriangle, Clock, Wifi } from "lucide-react";
+import { RefreshCw, AlertTriangle, Clock, Wifi, WifiOff } from "lucide-react";
 import { SymbolCard } from "./SymbolCard";
 import { SymbolOHLCTable } from "./SymbolOHLCTable";
 import { useSocketIO } from "@/hooks/useSocketIO";
@@ -239,7 +239,10 @@ export function MultiSymbolLiveData({
   const symbolsData: SymbolMarketData[] = useMemo(() => {
     return symbols.map((symbol) => {
       const data = multiSymbolData[symbol];
-      const status = symbolConnectionStatus[symbol] || "disconnected";
+      // If main WebSocket is not connected, force all symbols to show as disconnected
+      const status = !isConnected
+        ? "disconnected"
+        : (symbolConnectionStatus[symbol] || "disconnected");
 
       return {
         symbol,
@@ -250,7 +253,7 @@ export function MultiSymbolLiveData({
         status,
       };
     });
-  }, [symbols, multiSymbolData, symbolConnectionStatus, getLatestEntries]);
+  }, [symbols, multiSymbolData, symbolConnectionStatus, getLatestEntries, isConnected]);
 
   // Enhanced overall connection status with error detection
   const overallConnectionStatus = useMemo(() => {
@@ -358,6 +361,21 @@ export function MultiSymbolLiveData({
             <p className="text-sm text-black mt-1">
               Live market data is available during market hours (9:00 AM - 4:00
               PM IST, Monday-Friday)
+            </p>
+          </div>
+        )}
+
+        {/* Offline status display */}
+        {!isConnected && isMarketOpen && (
+          <div className="mt-2 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <WifiOff className="h-4 w-4 text-gray-600" />
+              <p className="text-sm text-gray-800 font-medium">
+                WebSocket Offline
+              </p>
+            </div>
+            <p className="text-xs text-gray-600 mt-1">
+              Unable to connect to the WebSocket server. Please check if the backend server is running on the correct port.
             </p>
           </div>
         )}

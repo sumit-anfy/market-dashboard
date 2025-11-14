@@ -74,10 +74,10 @@ export class DataValidator {
           data.high < Math.max(data.open, data.close) ||
           data.low > Math.min(data.open, data.close)
         ) {
-          console.warn(
-            "❌ Invalid market data: OHLC relationship violation",
-            data
-          );
+          // console.warn(
+          //   "❌ Invalid market data: OHLC relationship violation",
+          //   data
+          // );
           return null;
         }
       }
