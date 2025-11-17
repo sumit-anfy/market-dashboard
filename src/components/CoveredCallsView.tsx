@@ -76,7 +76,7 @@ export function CoveredCallsView() {
   // Filter states
   const [filters, setFilters] = useState({
     underlying: "",
-    optionType: "",
+    optionType: "CE",
     otmMin: -50,
     otmMax: 50,
     premiumMin: 0,
@@ -85,7 +85,7 @@ export function CoveredCallsView() {
 
   // Debounced filters state
   const [debouncedFilters, setDebouncedFilters] = useState(filters);
-  const [optionFilter, setOptionFilter] = useState<"" | "CE" | "PE">("");
+  const [optionFilter, setOptionFilter] = useState<"" | "CE" | "PE">("CE");
 
   // Debounce effect - 300ms delay
   useEffect(() => {

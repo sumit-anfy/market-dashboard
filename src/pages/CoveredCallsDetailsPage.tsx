@@ -663,9 +663,9 @@ export default function CoveredCallsDetailsPage() {
                 <Table>
                   <TableHeader className="sticky top-0 z-20 bg-background">
                     <TableRow>
-                      <TableHead className="text-center border-b" colSpan={7}>CALLS</TableHead>
-                      <TableHead className="text-center border-b" colSpan={1}>Strike</TableHead>
-                      <TableHead className="text-center border-b" colSpan={7}>PUTS</TableHead>
+                      <TableHead className="text-center border-b" colSpan={8}>CALLS</TableHead>
+                      <TableHead className="text-center border-b" colSpan={1}></TableHead>
+                      <TableHead className="text-center border-b" colSpan={8}>PUTS</TableHead>
                     </TableRow>
                     <TableRow>
                       <TableHead className="text-center">Date</TableHead>
@@ -676,7 +676,7 @@ export default function CoveredCallsDetailsPage() {
                       <TableHead className="text-center">BID</TableHead>
                       <TableHead className="text-center">ASK</TableHead>
                       <TableHead className="text-center">ASKQTY</TableHead>
-                      <TableHead className="text-center"></TableHead>
+                      <TableHead className="text-center">Strike</TableHead>
                       <TableHead className="text-center">AskQty</TableHead>
                       <TableHead className="text-center">ASK</TableHead>
                       <TableHead className="text-center">BID</TableHead>

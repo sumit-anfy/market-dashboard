@@ -11,6 +11,7 @@ import {
   TrendingDown,
   ChevronLeft,
   ChevronRight,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,8 +20,11 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { CronStatusCard } from "@/components/CronStatusCard";
+import axios from "axios";
+import { config } from "@/config/api";
 import { Slider } from "@/components/ui/slider";
 import {
   Table,
@@ -116,6 +120,9 @@ export default function ArbitrageDetailsPage() {
     minDate: null,
     maxDate: null,
   });
+  const [equityRange, setEquityRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null }>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
+  const [futuresRange, setFuturesRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null}>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
+
 
   // Check if current time is within market hours (9 AM - 4 PM IST)
   const isMarketHours = useMemo(() => {
@@ -226,14 +233,11 @@ export default function ArbitrageDetailsPage() {
         .filter((d) => !isNaN(d.getTime()));
 
       if (dates.length > 0) {
-        const min = new Date(Math.min(...dates.map((d) => d.getTime())));
-        const max = new Date(Math.max(...dates.map((d) => d.getTime())));
+        // const min = new Date(Math.min(...dates.map((d) => d.getTime())));
+        // const max = new Date(Math.max(...dates.map((d) => d.getTime())));
 
         // Mark as initialized before setting state
         datesInitializedRef.current = true;
-
-        // Single state update to prevent multiple re-renders
-        setDateRangeBounds({ minDate: min, maxDate: max });
       }
     }
   }, [filteredData]);
@@ -242,6 +246,35 @@ export default function ArbitrageDetailsPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [timeRange, gapFilter, gapRange, selectedStartDate, selectedEndDate]);
+
+  // Fetch min/max date range for this instrument + underlying symbol
+  useEffect(() => {
+    const fetchRanges = async () => {
+      try {
+        const symbol = state?.name || null;
+        const instId = state?.instrumentid || null;
+        const [eq, fut] = await Promise.all([
+          axios.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, { params: { symbol: symbol ?? 'null' } }),
+          axios.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, { params: { instrumentId: instId ?? 'null' } }),
+        ]);
+        setEquityRange({ min_date: eq.data?.min_date ?? null, max_date: eq.data?.max_date ?? null, hourly_min_date: eq.data?.hourly_min_date ?? null, hourly_max_date: eq.data?.hourly_max_date ?? null });
+        setFuturesRange({ min_date: fut.data?.min_date ?? null, max_date: fut.data?.max_date ?? null, hourly_min_date: fut.data?.hourly_min_date ?? null, hourly_max_date: fut.data?.hourly_max_date ?? null });
+      } catch (e) {
+        // ignore
+      }
+    };
+    fetchRanges();
+  }, [state?.name, state?.instrumentid]);
+
+  // Keep dateRangeBounds synced to futures date range (for filters/UI bounds)
+  useEffect(() => {
+    if (futuresRange.min_date || futuresRange.max_date) {
+      setDateRangeBounds({
+        minDate: timeRange === "hour" ? futuresRange.hourly_min_date ? new Date(futuresRange.hourly_min_date) : null : futuresRange.min_date ? new Date(futuresRange.min_date) : null,
+        maxDate: timeRange === "hour" ? futuresRange.hourly_max_date ? new Date(futuresRange.hourly_max_date) : null : futuresRange.max_date ? new Date(futuresRange.max_date) : null,
+      });
+    }
+  }, [futuresRange.min_date, futuresRange.max_date, timeRange]);
 
   // Note: Refresh functionality is now handled by MultiSymbolLiveData component
 
@@ -357,6 +390,12 @@ export default function ArbitrageDetailsPage() {
     return num !== null ? Number(num).toFixed(decimals) : "-";
   };
 
+  const strToDate = (s?: string): Date | undefined => {
+    if (!s) return undefined;
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? undefined : d;
+  };
+
   if (!state) {
     return (
       <div className="container mx-auto p-6">
@@ -401,16 +440,82 @@ export default function ArbitrageDetailsPage() {
 
       <Separator />
 
-      {/* Cron Status Card */}
-      <div className="gap-2 grid grid-cols-2 w-full">
-        <CronStatusCard
-          jobName="loginJob"
-          displayName="Daily Ticks NSE Futures Job"
-        />
-        <CronStatusCard
-          jobName="hourlyTicksNseFutJob"
-          displayName="Hourly Ticks NSE Futures Job"
-        />
+      {/* Daily Data range summary */}
+      <div className='grid gap-6 md:grid-cols-2'>
+        <Card>
+          <CardHeader className='grid grid-cols-3 text-center'>
+            <CardTitle className='text-base'>Equity Date Range (Daily)</CardTitle>
+            <CardTitle>From: <span className='font-medium text-foreground'>{equityRange.min_date ? new Date(equityRange.min_date).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          }) : '-'}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium text-foreground'>{equityRange.max_date ? new Date(equityRange.max_date).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          }) : '-'}</span></CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className='grid grid-cols-3 text-center'>
+            <CardTitle className='text-base'>Futures Date Range (Daily)</CardTitle>
+            <CardTitle>From: <span className='font-medium'>{futuresRange.min_date ? new Date(futuresRange.min_date).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          }) : '-'}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium'>{futuresRange.max_date ? new Date(futuresRange.max_date).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          }) : '-'}</span></CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
+      {/* Hourly Data range summary */}
+      <div className='grid gap-6 md:grid-cols-2'>
+        <Card>
+          <CardHeader className='grid grid-cols-3 text-center'>
+            <CardTitle className='text-base'>Equity Date Range (Hourly)</CardTitle>
+            <CardTitle>From: <span className='font-medium'>{equityRange.hourly_min_date ? new Date(equityRange.hourly_min_date).toLocaleDateString("en-IN", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour:"2-digit",
+                            minute:"2-digit"
+                          }) : '-'}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium'>{equityRange.hourly_max_date ? new Date(equityRange.hourly_max_date).toLocaleDateString("en-IN", {
+                            timeZone: "UTC",
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour:"2-digit",
+                            minute:"2-digit"
+                          }) : '-'}</span></CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className='grid grid-cols-3 text-center'>
+            <CardTitle className='text-base'>Futures Date Range (Hourly)</CardTitle>
+            <CardTitle>From: <span className='font-medium text-foreground'>{futuresRange.hourly_min_date ? new Date(futuresRange.hourly_min_date).toLocaleDateString("en-IN", {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour:"2-digit",
+                            minute:"2-digit"
+                          }) : '-'}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium text-foreground'>{futuresRange.hourly_max_date ? new Date(futuresRange.hourly_max_date).toLocaleDateString("en-IN", {
+                            timeZone: "UTC",
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                            hour:"2-digit",
+                            minute:"2-digit"
+                          }) : '-'}</span></CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       {/* Section 1: Selected Row Data */}
@@ -629,76 +734,94 @@ export default function ArbitrageDetailsPage() {
                 </div>
 
                 {/* Date Range Filter */}
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <Label className="text-sm font-medium">Date Range</Label>
-                    <div className="flex gap-2 items-center">
-                      <div className="flex-1">
+                  <div className="grid gap-2 grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center">
+                    <div className="flex-1 flex flex-col">
+                      <span className="text-[10px] text-muted-foreground sm:hidden mb-1">From</span>
+                      <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
                         <Input
-                          type="date"
+                          type="text"
+                          placeholder="YYYY-MM-DD"
                           value={selectedStartDate}
                           onChange={(e) => setSelectedStartDate(e.target.value)}
-                          min={
-                            dateRangeBounds.minDate
-                              ? dateRangeBounds.minDate
-                                  .toISOString()
-                                  .split("T")[0]
-                              : undefined
-                          }
-                          max={
-                            selectedEndDate ||
-                            (dateRangeBounds.maxDate
-                              ? dateRangeBounds.maxDate
-                                  .toISOString()
-                                  .split("T")[0]
-                              : undefined)
-                          }
-                          className="h-9 text-xs"
+                          className="h-9 text-sm sm:text-xs w-full"
+                          autoComplete="off"
+                          inputMode="numeric"
                         />
-                      </div>
-                      <div>to</div>
-                      <div className="flex-1">
-                        <Input
-                          type="date"
-                          value={selectedEndDate}
-                          onChange={(e) => setSelectedEndDate(e.target.value)}
-                          min={
-                            selectedStartDate ||
-                            (dateRangeBounds.minDate
-                              ? dateRangeBounds.minDate
-                                  .toISOString()
-                                  .split("T")[0]
-                              : undefined)
-                          }
-                          max={
-                            dateRangeBounds.maxDate
-                              ? dateRangeBounds.maxDate
-                                  .toISOString()
-                                  .split("T")[0]
-                              : undefined
-                          }
-                          className="h-9 text-xs"
-                        />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="icon" className="h-9 w-9">
+                              <CalendarIcon className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="p-0">
+                            <Calendar
+                              mode="single"
+                              selected={strToDate(selectedStartDate)}
+                              onSelect={(d) =>
+                                setSelectedStartDate(d ? d.toISOString().split("T")[0] : "")
+                              }
+                              fromDate={dateRangeBounds.minDate || undefined}
+                              toDate={
+                                selectedEndDate
+                                  ? strToDate(selectedEndDate)
+                                  : dateRangeBounds.maxDate || undefined
+                              }
+                            />
+                          </PopoverContent>
+                        </Popover>
                       </div>
                     </div>
-                    {dateRangeBounds.minDate && dateRangeBounds.maxDate && (
-                      <div className="flex justify-between text-xs text-muted-foreground px-3">
+                    <div className="text-center text-xs text-muted-foreground py-1">to</div>
+                    <div className="flex-1 flex flex-col">
+                      <span className="text-[10px] text-muted-foreground sm:hidden mb-1">To</span>
+                      <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
+                        <Input
+                          type="text"
+                          placeholder="YYYY-MM-DD"
+                          value={selectedEndDate}
+                          onChange={(e) => setSelectedEndDate(e.target.value)}
+                          className="h-9 text-sm sm:text-xs w-full"
+                          autoComplete="off"
+                          inputMode="numeric"
+                        />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" size="icon" className="h-9 w-9">
+                              <CalendarIcon className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="p-0">
+                            <Calendar
+                              mode="single"
+                              selected={strToDate(selectedEndDate)}
+                              onSelect={(d) =>
+                                setSelectedEndDate(d ? d.toISOString().split("T")[0] : "")
+                              }
+                              fromDate={
+                                selectedStartDate
+                                  ? strToDate(selectedStartDate)
+                                  : dateRangeBounds.minDate || undefined
+                              }
+                              toDate={dateRangeBounds.maxDate || undefined}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                  </div>
+                  {dateRangeBounds.minDate && dateRangeBounds.maxDate && (
+                      <div className="flex flex-col sm:flex-row gap-1 text-xs text-muted-foreground px-1 sm:px-3">
                         <span>
-                          Available:{" "}
-                          {dateRangeBounds.minDate.toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}{" "}
-                          -{" "}
-                          {dateRangeBounds.maxDate.toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
+                          Available: {dateRangeBounds.minDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                        <span>
+                          to {dateRangeBounds.maxDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                         </span>
                       </div>
-                    )}
-                  </div>
+                  )}
+                </div>
                 </div>
             </CardContent>
           </Card>
@@ -792,8 +915,16 @@ export default function ArbitrageDetailsPage() {
                       key={idx}
                       className={getRowColor(row.date || "-")}
                     >
-                      <TableCell className="text-center">
-                        {row.date.split("T")[0]}
+                      <TableCell className="text-center text-xs">
+                        {new Date(row.date).toLocaleDateString("en-IN", {
+                            timeZone: "UTC",
+                            month: "short",
+                            day: "numeric",
+                            year: "2-digit",
+                            hour:"numeric",
+                            minute:"2-digit",
+                            hour12: false
+                          })}
                       </TableCell>
                       <TableCell className="text-center font-medium">
                         {row.symbol_1 || "-"}
