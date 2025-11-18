@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import axios from "axios";
+import { apiClient } from "@/config/axiosClient";
 import { config } from "@/config/api";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -34,8 +34,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SortableTableHeader } from "@/components/modal/SortableTableHeader";
 import { useArbitrageDetails } from "@/hooks/useArbitrageDetails";
 import { MultiSymbolLiveData } from "@/components/MultiSymbolLiveData";
+
+type FiltersState = {
+  gapFilter: "both" | "positive" | "negative";
+  gapRange: [number, number];
+  startDate: string;
+  endDate: string;
+};
 
 interface LocationState {
   instrumentid: number;
@@ -49,6 +57,26 @@ interface LocationState {
   price_3: number;
   gap_1: number;
   gap_2: number;
+}
+
+type SortDirection = "asc" | "desc";
+type SortKey =
+  | "date"
+  | "symbol_1"
+  | "time_1"
+  | "price_1"
+  | "symbol_2"
+  | "time_2"
+  | "price_2"
+  | "symbol_3"
+  | "time_3"
+  | "price_3"
+  | "gap_1"
+  | "gap_2";
+
+interface TableSortConfig {
+  key: SortKey;
+  direction: SortDirection;
 }
 
 // LiveDataRow interface is no longer needed - data is handled by MultiSymbolLiveData
@@ -123,6 +151,13 @@ export default function ArbitrageDetailsPage() {
   const [equityRange, setEquityRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null }>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
   const [futuresRange, setFuturesRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null}>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
 
+  // Applied filters (used for API calls)
+  const [appliedFilters, setAppliedFilters] = useState<FiltersState>({
+    gapFilter,
+    gapRange,
+    startDate: "",
+    endDate: "",
+  });
 
   // Check if current time is within market hours (9 AM - 4 PM IST)
   const isMarketHours = useMemo(() => {
@@ -182,17 +217,17 @@ export default function ArbitrageDetailsPage() {
   // Note: WebSocket connections are now managed by MultiSymbolLiveData component
 
   // Calculate actual date range from selected dates
-  const actualDateRange = useMemo(() => {
+  const appliedDateRange = useMemo(() => {
     // If no dates selected, don't filter by date
-    if (!selectedStartDate && !selectedEndDate) {
+    if (!appliedFilters.startDate && !appliedFilters.endDate) {
       return { startDate: undefined, endDate: undefined };
     }
 
     return {
-      startDate: selectedStartDate || undefined,
-      endDate: selectedEndDate || undefined,
+      startDate: appliedFilters.startDate || undefined,
+      endDate: appliedFilters.endDate || undefined,
     };
-  }, [selectedStartDate, selectedEndDate]);
+  }, [appliedFilters.startDate, appliedFilters.endDate]);
 
   // Fetch filtered arbitrage data
   const {
@@ -206,12 +241,106 @@ export default function ArbitrageDetailsPage() {
     timeRange,
     page: currentPage,
     limit: itemsPerPage,
-    gapFilter,
-    minGap: gapRange[0],
-    maxGap: gapRange[1],
-    startDate: actualDateRange.startDate,
-    endDate: actualDateRange.endDate,
+    gapFilter: appliedFilters.gapFilter,
+    minGap: appliedFilters.gapRange[0],
+    maxGap: appliedFilters.gapRange[1],
+    startDate: appliedDateRange.startDate,
+    endDate: appliedDateRange.endDate,
   });
+
+  // Sorting for Historical Arbitrage Patterns table
+  const [sortConfig, setSortConfig] = useState<TableSortConfig | null>({
+    key: "date",
+    direction: "asc",
+  });
+
+  const handleSortColumn = (key: SortKey) => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  const sortedFilteredData = useMemo(() => {
+    if (!filteredData || !sortConfig) return filteredData;
+
+    const { key, direction } = sortConfig;
+    const multiplier = direction === "asc" ? 1 : -1;
+
+    const getValue = (row: any): number | string => {
+      switch (key) {
+        case "date":
+          return row.date ? new Date(row.date).getTime() : Number.NaN;
+        case "symbol_1":
+          return row.symbol_1 ?? "";
+        case "time_1":
+          return row.time_1 ?? "";
+        case "price_1":
+          return typeof row.price_1 === "number"
+            ? row.price_1
+            : parseFloat(row.price_1 ?? "NaN");
+        case "symbol_2":
+          return row.symbol_2 ?? "";
+        case "time_2":
+          return row.time_2 ?? "";
+        case "price_2":
+          return typeof row.price_2 === "number"
+            ? row.price_2
+            : parseFloat(row.price_2 ?? "NaN");
+        case "symbol_3":
+          return row.symbol_3 ?? "";
+        case "time_3":
+          return row.time_3 ?? "";
+        case "price_3":
+          return typeof row.price_3 === "number"
+            ? row.price_3
+            : parseFloat(row.price_3 ?? "NaN");
+        case "gap_1":
+          return typeof row.gap_1 === "number"
+            ? row.gap_1
+            : parseFloat(row.gap_1 ?? "NaN");
+        case "gap_2":
+          return typeof row.gap_2 === "number"
+            ? row.gap_2
+            : parseFloat(row.gap_2 ?? "NaN");
+        default:
+          return "";
+      }
+    };
+
+    const copy = [...filteredData];
+    copy.sort((a, b) => {
+      const av = getValue(a);
+      const bv = getValue(b);
+
+      const aIsNumber = typeof av === "number";
+      const bIsNumber = typeof bv === "number";
+
+      if (aIsNumber && bIsNumber) {
+        const aNum = av as number;
+        const bNum = bv as number;
+        const aNaN = Number.isNaN(aNum);
+        const bNaN = Number.isNaN(bNum);
+        if (aNaN && bNaN) return 0;
+        if (aNaN) return 1;
+        if (bNaN) return -1;
+        if (aNum === bNum) return 0;
+        return aNum > bNum ? 1 * multiplier : -1 * multiplier;
+      }
+
+      const aStr = String(av);
+      const bStr = String(bv);
+      if (aStr === bStr) return 0;
+      return aStr > bStr ? 1 * multiplier : -1 * multiplier;
+    });
+
+    return copy;
+  }, [filteredData, sortConfig]);
 
   // Track if dates have been initialized to prevent unnecessary API calls
   const datesInitializedRef = useRef<boolean>(false);
@@ -242,11 +371,6 @@ export default function ArbitrageDetailsPage() {
     }
   }, [filteredData]);
 
-  // Reset to page 1 when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [timeRange, gapFilter, gapRange, selectedStartDate, selectedEndDate]);
-
   // Fetch min/max date range for this instrument + underlying symbol
   useEffect(() => {
     const fetchRanges = async () => {
@@ -254,8 +378,8 @@ export default function ArbitrageDetailsPage() {
         const symbol = state?.name || null;
         const instId = state?.instrumentid || null;
         const [eq, fut] = await Promise.all([
-          axios.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, { params: { symbol: symbol ?? 'null' } }),
-          axios.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, { params: { instrumentId: instId ?? 'null' } }),
+          apiClient.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, { params: { symbol: symbol ?? 'null' } }),
+          apiClient.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, { params: { instrumentId: instId ?? 'null' } }),
         ]);
         setEquityRange({ min_date: eq.data?.min_date ?? null, max_date: eq.data?.max_date ?? null, hourly_min_date: eq.data?.hourly_min_date ?? null, hourly_max_date: eq.data?.hourly_max_date ?? null });
         setFuturesRange({ min_date: fut.data?.min_date ?? null, max_date: fut.data?.max_date ?? null, hourly_min_date: fut.data?.hourly_min_date ?? null, hourly_max_date: fut.data?.hourly_max_date ?? null });
@@ -394,6 +518,33 @@ export default function ArbitrageDetailsPage() {
     if (!s) return undefined;
     const d = new Date(s);
     return isNaN(d.getTime()) ? undefined : d;
+  };
+
+  const getTimeMatchFlags = (row: any) => {
+    const t1 = row.time_1 as string | null | undefined;
+    const t2 = row.time_2 as string | null | undefined;
+    const t3 = row.time_3 as string | null | undefined;
+
+    const isValid = (t?: string | null) => !!t && t.trim().length > 0;
+
+    const match1 =
+      isValid(t1) && ((isValid(t2) && t1 === t2) || (isValid(t3) && t1 === t3));
+    const match2 =
+      isValid(t2) && ((isValid(t1) && t2 === t1) || (isValid(t3) && t2 === t3));
+    const match3 =
+      isValid(t3) && ((isValid(t1) && t3 === t1) || (isValid(t2) && t3 === t2));
+
+    return { match1, match2, match3 };
+  };
+
+  const handleApplyFilters = () => {
+    setAppliedFilters({
+      gapFilter,
+      gapRange,
+      startDate: selectedStartDate || "",
+      endDate: selectedEndDate || "",
+    });
+    setCurrentPage(1);
   };
 
   if (!state) {
@@ -823,6 +974,16 @@ export default function ArbitrageDetailsPage() {
                   )}
                 </div>
                 </div>
+              <div className="mt-4 flex justify-end">
+                <Button
+                  onClick={handleApplyFilters}
+                  disabled={!!loading}
+                  variant="default"
+                  size="sm"
+                >
+                  Apply Filters
+                </Button>
+              </div>
             </CardContent>
           </Card>
 
@@ -868,32 +1029,108 @@ export default function ArbitrageDetailsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-center">Date</TableHead>
-                  <TableHead className="text-center">
+                  <SortableTableHeader
+                    sortKey="date"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
+                    Date
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="symbol_1"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
                     Near Future Symbol
-                  </TableHead>
-                  {timeRange == "hour" && <TableHead className="text-center">
-                    Near Future Time
-                  </TableHead>}
-                  <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">
+                  </SortableTableHeader>
+                  {timeRange == "hour" && (
+                    <SortableTableHeader
+                      sortKey="time_1"
+                      sortConfig={sortConfig as any}
+                      onSort={handleSortColumn as any}
+                      align="center"
+                    >
+                      Near Future Time
+                    </SortableTableHeader>
+                  )}
+                  <SortableTableHeader
+                    sortKey="price_1"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
+                    Price
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="symbol_2"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
                     Next Future Symbol
-                  </TableHead>
-                  {timeRange == "hour" && <TableHead className="text-center">
-                    Next Future Time
-                  </TableHead>}
-                  <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">
+                  </SortableTableHeader>
+                  {timeRange == "hour" && (
+                    <SortableTableHeader
+                      sortKey="time_2"
+                      sortConfig={sortConfig as any}
+                      onSort={handleSortColumn as any}
+                      align="center"
+                    >
+                      Next Future Time
+                    </SortableTableHeader>
+                  )}
+                  <SortableTableHeader
+                    sortKey="price_2"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
+                    Price
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="symbol_3"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
                     Far Future Symbol
-                  </TableHead>
-                  {timeRange == "hour" && <TableHead className="text-center">Far Future Time</TableHead>}
-                  <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">
+                  </SortableTableHeader>
+                  {timeRange == "hour" && (
+                    <SortableTableHeader
+                      sortKey="time_3"
+                      sortConfig={sortConfig as any}
+                      onSort={handleSortColumn as any}
+                      align="center"
+                    >
+                      Far Future Time
+                    </SortableTableHeader>
+                  )}
+                  <SortableTableHeader
+                    sortKey="price_3"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
+                    Price
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="gap_1"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
                     Gap (Near & Next)
-                  </TableHead>
-                  <TableHead className="text-center">
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="gap_2"
+                    sortConfig={sortConfig as any}
+                    onSort={handleSortColumn as any}
+                    align="center"
+                  >
                     Gap (Next & Far)
-                  </TableHead>
+                  </SortableTableHeader>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -909,14 +1146,22 @@ export default function ArbitrageDetailsPage() {
                       Error: {error}
                     </TableCell>
                   </TableRow>
-                ) : filteredData && filteredData.length > 0 ? (
-                  filteredData.map((row: any, idx: number) => (
-                    <TableRow
-                      key={idx}
-                      className={getRowColor(row.date || "-")}
-                    >
+                ) : sortedFilteredData && sortedFilteredData.length > 0 ? (
+                  sortedFilteredData.map((row: any, idx: number) => {
+                    const { match1, match2, match3 } =
+                      timeRange === "hour" ? getTimeMatchFlags(row) : { match1: false, match2: false, match3: false };
+
+                    const symbolBaseClass =
+                      "text-center font-medium";
+                    const symbolBlueClass = "text-blue-800";
+
+                    return (
+                      <TableRow
+                        key={idx}
+                        className={getRowColor(row.date || "-")}
+                      >
                       <TableCell className="text-center text-xs">
-                        {new Date(row.date).toLocaleDateString("en-IN", {
+                        {timeRange === "hour" ? new Date(row.date).toLocaleDateString("en-IN", {
                             timeZone: "UTC",
                             month: "short",
                             day: "numeric",
@@ -924,9 +1169,18 @@ export default function ArbitrageDetailsPage() {
                             hour:"numeric",
                             minute:"2-digit",
                             hour12: false
+                          }) : new Date(row.date).toLocaleDateString("en-IN", {
+                            timeZone: "UTC",
+                            month: "short",
+                            day: "numeric",
+                            year: "2-digit"
                           })}
                       </TableCell>
-                      <TableCell className="text-center font-medium">
+                      <TableCell
+                        className={`${symbolBaseClass} ${
+                          match1 ? symbolBlueClass : ""
+                        }`}
+                      >
                         {row.symbol_1 || "-"}
                       </TableCell>
                       {timeRange == "hour" && <TableCell className="text-center">
@@ -935,7 +1189,11 @@ export default function ArbitrageDetailsPage() {
                       <TableCell className="text-center">
                         {formatNumber(row.price_1)}
                       </TableCell>
-                      <TableCell className="text-center font-medium">
+                      <TableCell
+                        className={`${symbolBaseClass} ${
+                          match2 ? symbolBlueClass : ""
+                        }`}
+                      >
                         {row.symbol_2 || "-"}
                       </TableCell>
                       {timeRange == "hour" && <TableCell className="text-center">
@@ -944,7 +1202,11 @@ export default function ArbitrageDetailsPage() {
                       <TableCell className="text-center">
                         {formatNumber(row.price_2)}
                       </TableCell>
-                      <TableCell className="text-center font-medium">
+                      <TableCell
+                        className={`${symbolBaseClass} ${
+                          match3 ? symbolBlueClass : ""
+                        }`}
+                      >
                         {row.symbol_3 || "-"}
                       </TableCell>
                       {timeRange == "hour" && <TableCell className="text-center">
@@ -972,7 +1234,8 @@ export default function ArbitrageDetailsPage() {
                         {formatNumber(row.gap_2)}
                       </TableCell>
                     </TableRow>
-                  ))
+                  );
+                  })
                 ) : (
                   <TableRow>
                     <TableCell

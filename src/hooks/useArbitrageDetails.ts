@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import { apiClient } from "../config/axiosClient";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL + '/api' || "http://localhost:3002/api";
 
@@ -81,7 +81,7 @@ export const useArbitrageDetails = ({
         params.endDate = endDate;
       }
 
-      const response = await axios.get<ArbitrageDetailsResponse>(
+      const response = await apiClient.get<ArbitrageDetailsResponse>(
         `${API_BASE_URL}/arbitrage-details/${instrumentId}/filtered`,
         { params }
       );
@@ -93,9 +93,14 @@ export const useArbitrageDetails = ({
       } else {
         setError("Failed to fetch arbitrage details");
       }
-    } catch (err) {
+    } catch (err: any) {
+      // Ignore cancelled requests
+      if (err?.cancelled) {
+        console.log("[useArbitrageDetails] Request cancelled, ignoring");
+        return;
+      }
       console.error("Error fetching arbitrage details:", err);
-      setError(err instanceof Error ? err.message : "An error occurred");
+      setError(err?.message || "An error occurred");
     } finally {
       setLoading(false);
     }

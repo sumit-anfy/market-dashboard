@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 // import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import { apiClient } from '@/config/axiosClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -66,29 +66,26 @@ export function ArbitrageView() {
       setLoading(true);
       setError(null);
 
-      const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/arbitrage`, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        timeout: 10000, // 10 second timeout
-      });
+      const response = await apiClient.get(`${import.meta.env.VITE_API_BASE_URL}/api/arbitrage`);
 
       if (response.data.success) {
         setArbitrageData(response.data.data);
       } else {
         throw new Error(response.data.error || 'Failed to fetch arbitrage data');
       }
-    } catch (err) {
-      if (axios.isAxiosError(err)) {
-        if (err.code === 'ERR_NETWORK' || err.message.includes('Network Error')) {
-          setError('Unable to connect to backend server.');
-        } else if (err.response) {
-          setError(`Server error: ${err.response.status} - ${err.response.statusText}`);
-        } else {
-          setError(err.message);
-        }
+    } catch (err: any) {
+      // Ignore cancelled requests
+      if (err?.cancelled) {
+        console.log('[ArbitrageView] Request cancelled, ignoring');
+        return;
+      }
+
+      if (err?.status === 'ERR_NETWORK' || err?.message?.includes('Network Error')) {
+        setError('Unable to connect to backend server.');
+      } else if (err?.status) {
+        setError(`Server error: ${err.status} - ${err.message}`);
       } else {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        setError(err?.message || 'An error occurred');
       }
       console.error('Error fetching arbitrage data:', err);
     } finally {
@@ -102,8 +99,8 @@ export function ArbitrageView() {
     const fetchDateRanges = async () => {
       try {
         const [eq, fut] = await Promise.all([
-          axios.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, { params: { symbol: 'null' } }),
-          axios.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, { params: { instrumentId: 'null' } }),
+          apiClient.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, { params: { symbol: 'null' } }),
+          apiClient.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, { params: { instrumentId: 'null' } }),
         ]);
         setEquityRange({ min_date: eq.data?.min_date ?? null, max_date: eq.data?.max_date ?? null, hourly_min_date: eq.data?.hourly_min_date ?? null, hourly_max_date: eq.data?.hourly_max_date ?? null });
         setFuturesRange({ min_date: fut.data?.min_date ?? null, max_date: fut.data?.max_date ?? null, hourly_min_date: fut.data?.hourly_min_date ?? null, hourly_max_date: fut.data?.hourly_max_date ?? null });

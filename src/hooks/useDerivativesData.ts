@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import axios from "axios";
+import { apiClient } from "@/config/axiosClient";
 import { config } from "@/config/api";
 
 interface UseDerivativesDataProps {
@@ -36,7 +36,7 @@ export function useDerivativesData<T>({
         const url = `${config.endpoints.arbitrage}${endpoint}`;
         console.log("API URL:", url, "params:", { instrumentId });
 
-        const response = await axios.get(url, {
+        const response = await apiClient.get(url, {
           params: { instrumentId },
         });
 
@@ -45,7 +45,12 @@ export function useDerivativesData<T>({
           setData(response.data.data);
           console.log("Data set:", response.data.data.length, "records");
         }
-      } catch (err) {
+      } catch (err: any) {
+        // Ignore cancelled requests
+        if (err?.cancelled) {
+          console.log("[useDerivativesData] Request cancelled, ignoring");
+          return;
+        }
         console.error("Error fetching data:", err);
         setError(`Failed to fetch data from ${endpoint}`);
       } finally {

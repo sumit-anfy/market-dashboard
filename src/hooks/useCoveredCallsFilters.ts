@@ -1,7 +1,10 @@
 import { useState, useEffect } from "react";
-import axios from "axios";
+import { apiClient } from "../config/axiosClient";
 import { config } from "../config/api";
-import { CoveredCallsSymbolsExpiryResponse } from "../types/market";
+import {
+  CoveredCallsSymbolsExpiryResponse,
+  CoveredCallsSymbolExpiry,
+} from "../types/market";
 
 interface UseCoveredCallsFiltersParams {
   instrumentId: string;
@@ -10,6 +13,9 @@ interface UseCoveredCallsFiltersParams {
 export const useCoveredCallsFilters = ({
   instrumentId,
 }: UseCoveredCallsFiltersParams) => {
+  const [symbolExpiries, setSymbolExpiries] = useState<
+    CoveredCallsSymbolExpiry[]
+  >([]);
   const [symbols, setSymbols] = useState<string[]>([]);
   const [expiryDates, setExpiryDates] = useState<string[]>([]);
   const [strikes, setStrikes] = useState<number[]>([]);
@@ -22,20 +28,23 @@ export const useCoveredCallsFilters = ({
         setLoading(true);
         setError(null);
 
-        const response = await axios.get<CoveredCallsSymbolsExpiryResponse>(
+        const response = await apiClient.get<CoveredCallsSymbolsExpiryResponse>(
           `${config.apiBaseUrl}/api/covered-calls/${instrumentId}/symbols-expiry`
         );
 
         if (response.data.success) {
+          const rows = response.data.data;
+          setSymbolExpiries(rows);
+
           // Extract unique symbols and expiry dates
           const uniqueSymbols = [
-            ...new Set(response.data.data.map((item) => item.symbol)),
+            ...new Set(rows.map((item) => item.symbol)),
           ];
           const uniqueExpiryDates = [
-            ...new Set(response.data.data.map((item) => item.expiry_date)),
-          ];
+            ...new Set(rows.map((item) => item.expiry_date)),
+          ].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
           const uniqueStrikePrices = [
-            ...new Set(response.data.data.map((item) => item.strike)),
+            ...new Set(rows.map((item) => item.strike)),
           ] as number[];
 
           setSymbols(uniqueSymbols);
@@ -44,9 +53,13 @@ export const useCoveredCallsFilters = ({
         } else {
           throw new Error("Failed to fetch filter data");
         }
-      } catch (err) {
-        const errorMessage =
-          err instanceof Error ? err.message : "Unknown error occurred";
+      } catch (err: any) {
+        // Ignore cancelled requests
+        if (err?.cancelled) {
+          console.log("[useCoveredCallsFilters] Request cancelled, ignoring");
+          return;
+        }
+        const errorMessage = err?.message || "Unknown error occurred";
         setError(errorMessage);
         console.error("Error fetching covered calls filters:", err);
       } finally {
@@ -60,6 +73,7 @@ export const useCoveredCallsFilters = ({
   }, [instrumentId]);
 
   return {
+    symbolExpiries,
     symbols,
     expiryDates,
     strikes,

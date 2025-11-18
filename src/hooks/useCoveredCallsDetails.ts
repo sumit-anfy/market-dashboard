@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import { apiClient } from "../config/axiosClient";
 import { config } from "../config/api";
 import {
   CoveredCallsDetail,
@@ -56,7 +56,7 @@ export const useCoveredCallsDetails = ({
         params.symbol = symbol;
       }
 
-      const response = await axios.get<CoveredCallsDetailsResponse>(
+      const response = await apiClient.get<CoveredCallsDetailsResponse>(
         `${config.apiBaseUrl}/api/covered-calls/${instrumentId}/filtered`,
         { params }
       );
@@ -68,9 +68,13 @@ export const useCoveredCallsDetails = ({
       } else {
         throw new Error("Failed to fetch covered calls details");
       }
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Unknown error occurred";
+    } catch (err: any) {
+      // Ignore cancelled requests
+      if (err?.cancelled) {
+        console.log("[useCoveredCallsDetails] Request cancelled, ignoring");
+        return;
+      }
+      const errorMessage = err?.message || "Unknown error occurred";
       setError(errorMessage);
       console.error("Error fetching covered calls details:", err);
     } finally {

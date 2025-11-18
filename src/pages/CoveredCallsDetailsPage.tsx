@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import axios from "axios";
+import { apiClient } from "@/config/axiosClient";
 import { config } from "@/config/api";
 import { ArrowLeft, RefreshCw, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,8 +25,40 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
+import { SortableTableHeader } from "@/components/modal/SortableTableHeader";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type OptionSide = "CE" | "PE";
+type SortDirection = "asc" | "desc";
+type SortKey =
+  | "strike"
+  | "ce_date"
+  | "ce_oi"
+  | "ce_volume"
+  | "ce_ltp"
+  | "ce_bidQty"
+  | "ce_bid"
+  | "ce_ask"
+  | "ce_askQty"
+  | "pe_askQty"
+  | "pe_ask"
+  | "pe_bid"
+  | "pe_bidQty"
+  | "pe_ltp"
+  | "pe_volume"
+  | "pe_oi"
+  | "pe_date";
+
+interface TableSortConfig {
+  key: SortKey;
+  direction: SortDirection;
+}
 
 interface LiveSnapshot {
   symbol: string;
@@ -114,6 +146,7 @@ const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("e
 export default function CoveredCallsDetailsPage() {
   const { instrumentId } = useParams<{ instrumentId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Market hours (9:00–16:00 IST)
   const isMarketHours = useMemo(() => {
@@ -146,27 +179,61 @@ export default function CoveredCallsDetailsPage() {
     optionType: "ALL",
   });
 
-  // Build grouping by strike with CE/PE symbols and index for quick lookup
+  // Fetch filter metadata (symbols, expiry dates, strikes)
+  const {
+    symbolExpiries,
+    expiryDates,
+  } = useCoveredCallsFilters({ instrumentId: instrumentId! });
+
+  // Selected expiry date (nearest by default)
+  const [selectedExpiry, setSelectedExpiry] = useState<string | undefined>();
+
+  // If we navigated with an option symbol, try to align initial expiry to that symbol
+  useEffect(() => {
+    if (selectedExpiry || !baseData || baseData.length === 0) return;
+    const urlOptionSymbol = searchParams.get("optionSymbol");
+    if (!urlOptionSymbol) return;
+    const match = (baseData as any[]).find(
+      (row) => row.option_symbol === urlOptionSymbol
+    );
+    if (match?.expiry_date) {
+      setSelectedExpiry(match.expiry_date as string);
+    }
+  }, [baseData, searchParams, selectedExpiry]);
+
+  // Fallback: if no URL-based expiry, default to nearest expiry from filters
+  useEffect(() => {
+    if (selectedExpiry || !expiryDates || expiryDates.length === 0) return;
+    setSelectedExpiry(expiryDates[0]);
+  }, [expiryDates, selectedExpiry]);
+
+  // Build grouping by strike with CE/PE symbols and index for quick lookup, for the selected expiry only
   const { strikeGroups, symbolIndex, symbols } = useMemo(() => {
     const groupsMap = new Map<number, StrikeGroup>();
     const index = new Map<string, { strike: number; side: OptionSide }>();
     const allSymbols: string[] = [];
 
-    (baseData || []).forEach((row: any) => {
-      const strike = Number(row.strike);
-      const side = (row.option_type as OptionSide) || "CE";
-      const symbol = String(row.option_symbol);
+    if (!selectedExpiry) {
+      return { strikeGroups: [], symbolIndex: index, symbols: allSymbols };
+    }
 
-      if (!groupsMap.has(strike)) groupsMap.set(strike, { strike });
-      const group = groupsMap.get(strike)!;
-      if (side === "CE") group.ce = { symbol };
-      else group.pe = { symbol };
+    symbolExpiries
+      .filter((row) => row.expiry_date === selectedExpiry)
+      .forEach((row) => {
+        const strike = Number(row.strike);
+        const symbol = String(row.symbol);
+        const side: OptionSide = symbol.endsWith("PE") ? "PE" : "CE";
 
-      if (!index.has(symbol)) {
-        index.set(symbol, { strike, side });
-        allSymbols.push(symbol);
-      }
-    });
+        if (!groupsMap.has(strike)) groupsMap.set(strike, { strike });
+        const group = groupsMap.get(strike)!;
+        if (side === "CE") group.ce = { symbol };
+        else group.pe = { symbol };
+
+        if (!index.has(symbol)) {
+          index.set(symbol, { strike, side });
+          allSymbols.push(symbol);
+        }
+      });
 
     // Sort strikes ascending
     const ordered = Array.from(groupsMap.values()).sort(
@@ -178,16 +245,7 @@ export default function CoveredCallsDetailsPage() {
       symbolIndex: index,
       symbols: allSymbols,
     };
-  }, [baseData]);
-
-  // Fetch strike list from filters (server-provided strikes) and reorder strikeGroups if available
-  const { strikes } = useCoveredCallsFilters({ instrumentId: instrumentId! });
-  const orderedByFilters = useMemo(() => {
-    if (!strikes || strikes.length === 0) return strikeGroups;
-    const byStrike = new Map<number, StrikeGroup>();
-    strikeGroups.forEach((g) => byStrike.set(g.strike, g));
-    return strikes.map((s) => byStrike.get(s) || { strike: s });
-  }, [strikes, strikeGroups]);
+  }, [symbolExpiries, selectedExpiry]);
 
   // Socket.IO live streaming
   const {
@@ -205,7 +263,6 @@ export default function CoveredCallsDetailsPage() {
     return row?.underlying as string | undefined;
   }, [baseData]);
   // Keep last known underlying price even if no websocket data arrives
-  const [searchParams] = useSearchParams();
   const initialUnderlyingPrice = useMemo(() => {
     const v = searchParams.get("underlyingPrice");
     if (!v) return undefined;
@@ -256,12 +313,91 @@ export default function CoveredCallsDetailsPage() {
   const lastTimestampsRef = useRef<Record<string, string | undefined>>({});
   const [highlighted, setHighlighted] = useState<Record<string, number>>({});
 
-  // Sort order toggle (ascending by default)
-  const [sortAsc, setSortAsc] = useState(true);
-  const orderedGroups = useMemo(
-    () => (sortAsc ? orderedByFilters : [...orderedByFilters].reverse()),
-    [orderedByFilters, sortAsc]
-  );
+  // Sorting state (by column + direction)
+  const [sortConfig, setSortConfig] = useState<TableSortConfig | null>({
+    key: "strike",
+    direction: "asc",
+  });
+
+  const handleSortColumn = (key: SortKey) => {
+    setSortConfig((prev) => {
+      if (prev?.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  const orderedGroups = useMemo(() => {
+    if (!sortConfig) return strikeGroups;
+
+    const { key, direction } = sortConfig;
+    const multiplier = direction === "asc" ? 1 : -1;
+
+    const getValue = (group: StrikeGroup): number => {
+      const snap = snapshots[group.strike];
+      const ce = snap?.ce;
+      const pe = snap?.pe;
+
+      switch (key) {
+        case "strike":
+          return group.strike;
+        case "ce_date":
+          return ce?.timestamp ? new Date(ce.timestamp).getTime() : Number.NaN;
+        case "ce_oi":
+          return ce?.oi ?? Number.NaN;
+        case "ce_volume":
+          return ce?.volume ?? Number.NaN;
+        case "ce_ltp":
+          return ce?.ltp ?? Number.NaN;
+        case "ce_bidQty":
+          return ce?.bidQty ?? Number.NaN;
+        case "ce_bid":
+          return ce?.bid ?? Number.NaN;
+        case "ce_ask":
+          return ce?.ask ?? Number.NaN;
+        case "ce_askQty":
+          return ce?.askQty ?? Number.NaN;
+        case "pe_date":
+          return pe?.timestamp ? new Date(pe.timestamp).getTime() : Number.NaN;
+        case "pe_oi":
+          return pe?.oi ?? Number.NaN;
+        case "pe_volume":
+          return pe?.volume ?? Number.NaN;
+        case "pe_ltp":
+          return pe?.ltp ?? Number.NaN;
+        case "pe_bidQty":
+          return pe?.bidQty ?? Number.NaN;
+        case "pe_bid":
+          return pe?.bid ?? Number.NaN;
+        case "pe_ask":
+          return pe?.ask ?? Number.NaN;
+        case "pe_askQty":
+          return pe?.askQty ?? Number.NaN;
+        default:
+          return group.strike;
+      }
+    };
+
+    const copy = [...strikeGroups];
+    copy.sort((a, b) => {
+      const av = getValue(a);
+      const bv = getValue(b);
+      const aIsNaN = Number.isNaN(av);
+      const bIsNaN = Number.isNaN(bv);
+
+      if (aIsNaN && bIsNaN) return 0;
+      if (aIsNaN) return 1;
+      if (bIsNaN) return -1;
+      if (av === bv) return 0;
+      return av > bv ? 1 * multiplier : -1 * multiplier;
+    });
+
+    return copy;
+  }, [strikeGroups, sortConfig, snapshots]);
 
   // Totals for Volume and OI across all strikes (current snapshots)
   const totals = useMemo(() => {
@@ -343,13 +479,25 @@ export default function CoveredCallsDetailsPage() {
     return () => clearInterval(interval);
   }, [isConnected, expectedSymbols, STALE_MS]);
 
+  // When expiry changes, reset snapshots and historical metadata to avoid mixing expiries
+  useEffect(() => {
+    setSnapshots({});
+    lastTimestampsRef.current = {};
+    setHighlighted({});
+    setHistoricalLastDate(null);
+    setHistoricalLoadedAt(null);
+  }, [selectedExpiry]);
+
   // Historical fetch (reusable)
   const fetchHistorical = useMemo(
     () =>
       async () => {
+        if (!selectedExpiry) return;
         try {
           const url = `${config.apiBaseUrl}/api/covered-calls/${instrumentId}/latest`;
-          const resp = await axios.get(url);
+          const resp = await apiClient.get(url, {
+            params: { expiryDate: selectedExpiry },
+          });
           const rows: any[] = resp.data?.data || [];
 
           const next: Record<number, { ce?: LiveSnapshot; pe?: LiveSnapshot }> = {};
@@ -391,17 +539,17 @@ export default function CoveredCallsDetailsPage() {
           console.error("Historical fallback fetch failed", e);
         }
       },
-    [instrumentId]
+    [instrumentId, selectedExpiry]
   );
 
   // Fetch historical data once per fallback event
   useEffect(() => {
-    if (historicalMode) {
+    if (historicalMode && selectedExpiry) {
       if (!historicalLoadedAt || Date.now() - historicalLoadedAt > 30000) {
         fetchHistorical();
       }
     }
-  }, [historicalMode, historicalLoadedAt, fetchHistorical]);
+  }, [historicalMode, historicalLoadedAt, fetchHistorical, selectedExpiry]);
 
   // If market is closed, immediately switch to historical mode (no 15s wait)
   useEffect(() => {
@@ -536,8 +684,23 @@ export default function CoveredCallsDetailsPage() {
           )}
         </div>
         <div>
-          <Button variant="outline" size="sm" onClick={() => setSortAsc((s) => !s)}>
-            Sort: {sortAsc ? "Asc" : "Desc"}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setSortConfig((prev) => {
+                const nextDirection: SortDirection =
+                  prev?.key === "strike" && prev.direction === "asc"
+                    ? "desc"
+                    : "asc";
+                return { key: "strike", direction: nextDirection };
+              })
+            }
+          >
+            Sort Strike:{" "}
+            {sortConfig?.key === "strike" && sortConfig.direction === "desc"
+              ? "Desc"
+              : "Asc"}
           </Button>
         </div>
       </div>
@@ -651,8 +814,27 @@ export default function CoveredCallsDetailsPage() {
       </div> */}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Live Market Data</CardTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Expiry</span>
+            <Select
+              value={selectedExpiry ?? ""}
+              onValueChange={(value) => setSelectedExpiry(value)}
+              disabled={!expiryDates || expiryDates.length === 0}
+            >
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="Select expiry" />
+              </SelectTrigger>
+              <SelectContent>
+                {expiryDates?.map((date) => (
+                  <SelectItem key={date} value={date}>
+                    {formatDateOnly(date)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2">
           {orderedGroups.length === 0 ? (
@@ -668,23 +850,142 @@ export default function CoveredCallsDetailsPage() {
                       <TableHead className="text-center border-b" colSpan={8}>PUTS</TableHead>
                     </TableRow>
                     <TableRow>
-                      <TableHead className="text-center">Date</TableHead>
-                      <TableHead className="text-center">OI</TableHead>
-                      <TableHead className="text-center">Volume</TableHead>
-                      <TableHead className="text-center">LTP</TableHead>
-                      <TableHead className="text-center">BidQTY</TableHead>
-                      <TableHead className="text-center">BID</TableHead>
-                      <TableHead className="text-center">ASK</TableHead>
-                      <TableHead className="text-center">ASKQTY</TableHead>
-                      <TableHead className="text-center">Strike</TableHead>
-                      <TableHead className="text-center">AskQty</TableHead>
-                      <TableHead className="text-center">ASK</TableHead>
-                      <TableHead className="text-center">BID</TableHead>
-                      <TableHead className="text-center">BidQty</TableHead>
-                      <TableHead className="text-center">LTP</TableHead>
-                      <TableHead className="text-center">Volume</TableHead>
-                      <TableHead className="text-center">OI</TableHead>
-                      <TableHead className="text-center">Date</TableHead>
+                      <SortableTableHeader
+                        sortKey="ce_date"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        Date
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="ce_oi"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        OI
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="ce_volume"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        Volume
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="ce_ltp"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        LTP
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="ce_bidQty"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        BidQTY
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="ce_bid"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        BID
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="ce_ask"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        ASK
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="ce_askQty"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        ASKQTY
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="strike"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        Strike
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="pe_askQty"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        AskQty
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="pe_ask"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        ASK
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="pe_bid"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        BID
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="pe_bidQty"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        BidQty
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="pe_ltp"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        LTP
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="pe_volume"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        Volume
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="pe_oi"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        OI
+                      </SortableTableHeader>
+                      <SortableTableHeader
+                        sortKey="pe_date"
+                        sortConfig={sortConfig}
+                        onSort={handleSortColumn}
+                        align="center"
+                      >
+                        Date
+                      </SortableTableHeader>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

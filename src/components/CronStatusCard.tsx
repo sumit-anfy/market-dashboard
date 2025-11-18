@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
+import { apiClient } from '@/config/axiosClient';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Clock, Activity, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -24,11 +24,16 @@ export function CronStatusCard({ jobName, displayName }: CronStatusCardProps) {
   useEffect(() => {
     const fetchStatus = async () => {
       try {
-        const response = await axios.get(`${import.meta.env.VITE_API_BASE_URL}/api/cron-status`);
+        const response = await apiClient.get(`${import.meta.env.VITE_API_BASE_URL}/api/cron-status`);
         if (response.data.success && response.data.data[jobName]) {
           setJobStatus(response.data.data[jobName]);
         }
-      } catch (error) {
+      } catch (error: any) {
+        // Ignore cancelled requests
+        if (error?.cancelled) {
+          console.log('[CronStatusCard] Request cancelled, ignoring');
+          return;
+        }
         console.error('Failed to fetch cron status:', error);
       } finally {
         setLoading(false);

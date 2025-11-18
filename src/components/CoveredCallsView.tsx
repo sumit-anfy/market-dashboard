@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import axios from "axios";
+import { apiClient } from "@/config/axiosClient";
 import {
   Card,
   CardContent,
@@ -25,11 +25,20 @@ import { config } from "@/config/api";
 import { RadioGroup } from "@radix-ui/react-radio-group";
 import { RadioGroupItem } from "./ui/radio-group";
 
+type FiltersState = {
+  underlying: string;
+  optionType: "" | "CE" | "PE";
+  otmMin: number;
+  otmMax: number;
+  premiumMin: number;
+  premiumMax: number;
+};
+
 interface CoveredCallData {
   id: number;
   underlyingSymbol: string;
   underlyingPrice: number | null;
-  optionSymbol: string;
+  expiryMonth: string;
   time: string;
   premium: number | null;
   volume: number | null;
@@ -53,7 +62,6 @@ interface PaginationInfo {
 }
 
 export function CoveredCallsView() {
-
   // Data and loading states
   const [optionContractsData, setOptionContractsData] = useState<
     CoveredCallData[]
@@ -74,7 +82,7 @@ export function CoveredCallsView() {
   });
 
   // Filter states
-  const [filters, setFilters] = useState({
+  const [filters, setFilters] = useState<FiltersState>({
     underlying: "",
     optionType: "CE",
     otmMin: -50,
@@ -83,22 +91,13 @@ export function CoveredCallsView() {
     premiumMax: 25,
   });
 
-  // Debounced filters state
-  const [debouncedFilters, setDebouncedFilters] = useState(filters);
+  // Applied filters state (used for API calls)
+  const [appliedFilters, setAppliedFilters] = useState<FiltersState>(filters);
   const [optionFilter, setOptionFilter] = useState<"" | "CE" | "PE">("CE");
-
-  // Debounce effect - 300ms delay
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedFilters(filters);
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [filters]);
 
   // Fetch covered calls data from API with pagination and filters
   const fetchCoveredCallsData = useCallback(
-    async (page: number = 1) => {
+    async (page: number = 1, filtersForApi: FiltersState = appliedFilters) => {
       try {
         setLoading({ isLoading: true, error: null });
 
@@ -109,19 +108,19 @@ export function CoveredCallsView() {
         });
 
         // Add optional filters if they have values
-        if (debouncedFilters.underlying.trim()) {
-          params.append("underlying", debouncedFilters.underlying.trim());
+        if (filtersForApi.underlying.trim()) {
+          params.append("underlying", filtersForApi.underlying.trim());
         }
-        if (debouncedFilters.optionType) {
-          params.append("optionType", debouncedFilters.optionType);
+        if (filtersForApi.optionType) {
+          params.append("optionType", filtersForApi.optionType);
         }
         // Always send OTM and Premium filters (including default values)
-        params.append("minOtm", debouncedFilters.otmMin.toString());
-        params.append("maxOtm", debouncedFilters.otmMax.toString());
-        params.append("minPremium", debouncedFilters.premiumMin.toString());
-        params.append("maxPremium", debouncedFilters.premiumMax.toString());
+        params.append("minOtm", filtersForApi.otmMin.toString());
+        params.append("maxOtm", filtersForApi.otmMax.toString());
+        params.append("minPremium", filtersForApi.premiumMin.toString());
+        params.append("maxPremium", filtersForApi.premiumMax.toString());
 
-        const response = await axios.get<{
+        const response = await apiClient.get<{
           success: boolean;
           data: CoveredCallData[];
           avg_premium: number;
@@ -131,9 +130,7 @@ export function CoveredCallsView() {
           limit: number;
           totalPages: number;
           hasMore: boolean;
-        }>(`${config.endpoints.coveredCalls}?${params.toString()}`, {
-          timeout: 60000,
-        });
+        }>(`${config.endpoints.coveredCalls}?${params.toString()}`);
 
         if (response.data.success) {
           setOptionContractsData(response.data.data);
@@ -150,6 +147,11 @@ export function CoveredCallsView() {
           throw new Error("Failed to fetch covered calls data");
         }
       } catch (error: any) {
+        // Ignore cancelled requests
+        if (error?.cancelled) {
+          console.log("[CoveredCallsView] Request cancelled, ignoring");
+          return;
+        }
         console.error("Error fetching covered calls data:", error);
         setLoading({
           isLoading: false,
@@ -157,18 +159,15 @@ export function CoveredCallsView() {
         });
       }
     },
-    [debouncedFilters, pagination.limit]
+    [appliedFilters, pagination.limit]
   );
 
-  // Fetch data on component mount and when debounced filters change
+  // Fetch data on component mount (initial load with default filters)
   useEffect(() => {
-    fetchCoveredCallsData(1);
-  }, [debouncedFilters, pagination.limit]);
-
-  // Reset to page 1 when filters change (immediate, not debounced)
-  useEffect(() => {
-    setPagination((prev) => ({ ...prev, page: 1 }));
-  }, [filters]);
+    fetchCoveredCallsData(1, appliedFilters);
+    // We intentionally only load once on mount; filters are applied via button
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Handle page navigation
   const handlePageChange = (newPage: number) => {
@@ -201,6 +200,12 @@ export function CoveredCallsView() {
     const difference = Math.abs(underlyingPrice - strikePrice);
     const percentDiff = (difference / underlyingPrice) * 100;
     return percentDiff < 1;
+  };
+
+  const handleApplyFilters = () => {
+    setAppliedFilters(filters);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    fetchCoveredCallsData(1, filters);
   };
 
   return (
@@ -271,10 +276,6 @@ export function CoveredCallsView() {
                       ...prev,
                       underlying: e.target.value,
                     }));
-                    // Auto-fetch when user types
-                    if (e.target.value || !e.target.value) {
-                      // Debounce with useCallback already in place
-                    }
                   }}
                   className="h-9 pl-9"
                 />
@@ -478,6 +479,16 @@ export function CoveredCallsView() {
               </div>
             </div>
           </div>
+          <div className="mt-4 flex justify-end">
+            <Button
+              onClick={handleApplyFilters}
+              disabled={loading.isLoading}
+              variant="default"
+              size="sm"
+            >
+              Apply Filters
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -647,13 +658,13 @@ export function CoveredCallsView() {
                         Price
                       </TableHead>
                       <TableHead className="text-center font-semibold">
-                        Option Symbol
-                      </TableHead>
-                      <TableHead className="text-center font-semibold">
-                        Type
+                        Expiry Month
                       </TableHead>
                       <TableHead className="text-center font-semibold">
                         Strike
+                      </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        Type
                       </TableHead>
                       <TableHead className="text-center font-semibold">
                         Premium
@@ -689,7 +700,7 @@ export function CoveredCallsView() {
                               new URLSearchParams({
                                 id: String(option.id),
                                 underlyingSymbol: option.underlyingSymbol,
-                                optionSymbol: option.optionSymbol,
+                                expiryMonth: option.expiryMonth,
                                 time: option.time,
                                 underlyingPrice: String(option.underlyingPrice ?? ''),
                                 premium: String(option.premium ?? ''),
@@ -712,15 +723,15 @@ export function CoveredCallsView() {
                             {formatPrice(option.underlyingPrice)}
                           </TableCell>
                           <TableCell className="text-center text-sm font-mono">
-                            {option.optionSymbol}
+                            {option.expiryMonth}
+                          </TableCell>
+                          <TableCell className="text-center font-mono text-base">
+                            {formatPrice(option.strikePrice)}
                           </TableCell>
                           <TableCell className="text-center">
                             <Badge variant={getOptionTypeBadge(option.optionType)}>
                               {option.optionType}
                             </Badge>
-                          </TableCell>
-                          <TableCell className="text-center font-mono text-base">
-                            {formatPrice(option.strikePrice)}
                           </TableCell>
                           <TableCell className="text-center font-mono text-base">
                             {formatPrice(option.premium)}
