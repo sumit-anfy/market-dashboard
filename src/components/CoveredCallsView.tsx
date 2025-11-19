@@ -208,6 +208,21 @@ export function CoveredCallsView() {
     fetchCoveredCallsData(1, filters);
   };
 
+  const handleResetFilters = () => {
+    const defaultFilters: FiltersState = {
+      underlying: "",
+      optionType: "CE",
+      otmMin: -50,
+      otmMax: 50,
+      premiumMin: 0,
+      premiumMax: 25,
+    };
+    setFilters(defaultFilters);
+    setAppliedFilters(defaultFilters);
+    setPagination((prev) => ({ ...prev, page: 1 }));
+    fetchCoveredCallsData(1, defaultFilters);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -392,6 +407,7 @@ export function CoveredCallsView() {
 
                   {/* Scale labels */}
                   <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                    <span>-100</span>
                     <span>0</span>
                     <span>+100</span>
                   </div>
@@ -473,13 +489,13 @@ export function CoveredCallsView() {
                   {/* Scale labels */}
                   <div className="flex justify-between text-xs text-muted-foreground mt-2">
                     <span>0</span>
-                    <span>+50</span>
+                    <span>50</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex justify-end gap-4">
             <Button
               onClick={handleApplyFilters}
               disabled={loading.isLoading}
@@ -487,6 +503,14 @@ export function CoveredCallsView() {
               size="sm"
             >
               Apply Filters
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleResetFilters}
+              disabled={loading.isLoading}
+            >
+              Reset Filters
             </Button>
           </div>
         </CardContent>

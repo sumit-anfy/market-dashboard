@@ -547,6 +547,20 @@ export default function ArbitrageDetailsPage() {
     setCurrentPage(1);
   };
 
+  const handleResetFilters = () => {
+    setGapFilter("both");
+    setGapRange([-50, 50]);
+    setSelectedStartDate("");
+    setSelectedEndDate("");
+    setAppliedFilters({
+      gapFilter: "both",
+      gapRange: [-50, 50],
+      startDate: "",
+      endDate: "",
+    });
+    setCurrentPage(1);
+  };
+
   if (!state) {
     return (
       <div className="container mx-auto p-6">
@@ -974,7 +988,7 @@ export default function ArbitrageDetailsPage() {
                   )}
                 </div>
                 </div>
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex justify-end gap-4">
                 <Button
                   onClick={handleApplyFilters}
                   disabled={!!loading}
@@ -982,6 +996,13 @@ export default function ArbitrageDetailsPage() {
                   size="sm"
                 >
                   Apply Filters
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetFilters}
+                >
+                  Reset Filters
                 </Button>
               </div>
             </CardContent>

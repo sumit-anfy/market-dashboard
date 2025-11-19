@@ -157,3 +157,22 @@ export interface CoveredCallsSymbolsExpiryResponse {
   success: boolean;
   data: CoveredCallsSymbolExpiry[];
 }
+
+export interface CoveredCallsTrendRow {
+  underlying: string;
+  time: string;
+  underlying_price: number;
+  strike: number;
+  expiry_month: string;
+  option_type: "CE" | "PE";
+  premium: number;
+  volume: number;
+  otm: number;
+  premium_percentage: number;
+}
+
+export interface CoveredCallsTrendResponse {
+  success: boolean;
+  data: CoveredCallsTrendRow[];
+  pagination: CoveredCallsDetailsPagination;
+}

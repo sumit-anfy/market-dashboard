@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { apiClient } from "@/config/axiosClient";
 import { config } from "@/config/api";
-import { ArrowLeft, RefreshCw, Info } from "lucide-react";
+import { ArrowLeft, RefreshCw, Info, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 // import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import type { CoveredCallsTrendRow, CoveredCallsTrendResponse } from "@/types/market";
 
 type OptionSide = "CE" | "PE";
 type SortDirection = "asc" | "desc";
@@ -57,6 +66,24 @@ type SortKey =
 
 interface TableSortConfig {
   key: SortKey;
+  direction: SortDirection;
+}
+
+// Sort keys for trend table
+type TrendSortKey =
+  | "underlying"
+  | "time"
+  | "underlying_price"
+  | "strike"
+  | "expiry_month"
+  | "option_type"
+  | "premium"
+  | "volume"
+  | "otm"
+  | "premium_percentage";
+
+interface TrendTableSortConfig {
+  key: TrendSortKey;
   direction: SortDirection;
 }
 
@@ -661,6 +688,393 @@ export default function CoveredCallsDetailsPage() {
     }, 500);
   };
 
+  // ---------- Trend Section State ----------
+  type TrendType = "daily" | "hourly";
+
+  const [trendType, setTrendType] = useState<TrendType>("daily");
+  // const [, setTrendExpiry] = useState<string>("ALL");
+  const [trendOptionType, setTrendOptionType] = useState<"ALL" | "CE" | "PE">(
+    "CE"
+  );
+  // const [, setTrendStrike] = useState<string>("ALL");
+  const [trendPage, setTrendPage] = useState(1);
+  const [trendOtmMin, setTrendOtmMin] = useState(-50);
+  const [trendOtmMax, setTrendOtmMax] = useState(50);
+  const [trendPremiumMin, setTrendPremiumMin] = useState(0);
+  const [trendPremiumMax, setTrendPremiumMax] = useState(25);
+  const [trendStartDate, setTrendStartDate] = useState<string>("");
+  const [trendEndDate, setTrendEndDate] = useState<string>("");
+  const [appliedTrendFilters, setAppliedTrendFilters] = useState<{
+    optionType: "ALL" | "CE" | "PE";
+    otmMin: number;
+    otmMax: number;
+    premiumMin: number;
+    premiumMax: number;
+    startDate: string;
+    endDate: string;
+  }>({
+    optionType: "CE",
+    otmMin: -50,
+    otmMax: 50,
+    premiumMin: 0,
+    premiumMax: 25,
+    startDate: "",
+    endDate: "",
+  });
+
+  const [trendData, setTrendData] = useState<CoveredCallsTrendRow[]>([]);
+  const [trendLoading, setTrendLoading] = useState(false);
+  const [trendError, setTrendError] = useState<string | null>(null);
+  const [trendPagination, setTrendPagination] = useState<{
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+    hasMore: boolean;
+  } | null>(null);
+
+  // Sorting state for trend table
+  const [trendSortConfig, setTrendSortConfig] = useState<TrendTableSortConfig | null>({
+    key: "time",
+    direction: "desc",
+  });
+
+  const getTrendPageNumbers = () => {
+    if (!trendPagination) return [];
+
+    const totalPages = trendPagination.totalPages;
+    const current = trendPage;
+    const pageNumbers: (number | string)[] = [];
+
+    if (totalPages <= 7) {
+      for (let i = 1; i <= totalPages; i++) {
+        pageNumbers.push(i);
+      }
+    } else {
+      pageNumbers.push(1);
+
+      if (current > 3) {
+        pageNumbers.push("...");
+      }
+
+      const start = Math.max(2, current - 1);
+      const end = Math.min(totalPages - 1, current + 1);
+
+      for (let i = start; i <= end; i++) {
+        pageNumbers.push(i);
+      }
+
+      if (current < totalPages - 2) {
+        pageNumbers.push("...");
+      }
+
+      pageNumbers.push(totalPages);
+    }
+
+    return pageNumbers;
+  };
+
+  // Build expiry month options (YYYY-MM value, human label) from symbolExpiries
+  // const trendExpiryOptions = useMemo(() => {
+  //   const map = new Map<string, string>();
+  //   symbolExpiries.forEach((row) => {
+  //     const d = new Date(row.expiry_date);
+  //     if (Number.isNaN(d.getTime())) return;
+  //     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+  //       2,
+  //       "0"
+  //     )}`;
+  //     if (!map.has(key)) {
+  //       const label = d.toLocaleDateString("en-IN", {
+  //         month: "short",
+  //         year: "2-digit",
+  //       });
+  //       map.set(key, label);
+  //     }
+  //   });
+  //   const items = Array.from(map.entries()).map(([value, label]) => ({
+  //     value,
+  //     label,
+  //   }));
+  //   items.sort((a, b) => a.value.localeCompare(b.value));
+  //   return items;
+  // }, [symbolExpiries]);
+
+  // Strike options across all expiries
+  // const trendStrikeOptions = useMemo(() => {
+  //   const set = new Set<number>();
+  //   symbolExpiries.forEach((row) => {
+  //     const s = Number(row.strike);
+  //     if (!Number.isNaN(s)) set.add(s);
+  //   });
+  //   return Array.from(set).sort((a, b) => a - b);
+  // }, [symbolExpiries]);
+
+  const fetchTrend = useMemo(
+    () => async () => {
+      try {
+        if (!instrumentId) return;
+        setTrendLoading(true);
+        setTrendError(null);
+
+        const path =
+          trendType === "daily"
+            ? "trend/daily"
+            : "trend/hourly";
+        const url = `${config.apiBaseUrl}/api/covered-calls/${instrumentId}/${path}`;
+
+        const params: Record<string, string | number> = {
+          page: trendPage,
+        };
+
+        // if (appliedTrendFilters.expiry !== "ALL") {
+        //   params.expiry = appliedTrendFilters.expiry;
+        // }
+        if (
+          appliedTrendFilters.optionType &&
+          appliedTrendFilters.optionType !== "ALL"
+        ) {
+          params.optionType = appliedTrendFilters.optionType;
+        }
+        // if (appliedTrendFilters.strike !== "ALL") {
+        //   params.strike = appliedTrendFilters.strike;
+        // }
+        params.minOtm = appliedTrendFilters.otmMin;
+        params.maxOtm = appliedTrendFilters.otmMax;
+        params.minPremium = appliedTrendFilters.premiumMin;
+        params.maxPremium = appliedTrendFilters.premiumMax;
+        if (appliedTrendFilters.startDate) {
+          params.startDate = appliedTrendFilters.startDate;
+        }
+        if (appliedTrendFilters.endDate) {
+          params.endDate = appliedTrendFilters.endDate;
+        }
+
+        const resp = await apiClient.get<CoveredCallsTrendResponse>(url, {
+          params,
+        });
+
+        if (!resp.data?.success) {
+          throw new Error("Failed to fetch trend data");
+        }
+
+        setTrendData(resp.data.data || []);
+        setTrendPagination(resp.data.pagination);
+      } catch (e: any) {
+        // Ignore axios cancellation (common on rapid filter changes / StrictMode)
+        if (e?.cancelled || e?.message === "canceled" || e?.code === "ERR_CANCELED") {
+          // eslint-disable-next-line no-console
+          console.log("[CoveredCallsDetails] Trend request cancelled, ignoring");
+          return;
+        }
+        const msg = e?.message || "Failed to fetch trend data";
+        setTrendError(msg);
+        console.error("Error fetching covered calls trend:", e);
+      } finally {
+        setTrendLoading(false);
+      }
+    },
+    [instrumentId, trendType, trendPage, appliedTrendFilters]
+  );
+
+  // Refetch trend data when filters/page change
+  useEffect(() => {
+    fetchTrend();
+  }, [fetchTrend]);
+
+  const handleApplyTrendFilters = () => {
+    setTrendPage(1);
+    setAppliedTrendFilters({
+      optionType: trendOptionType,
+      otmMin: trendOtmMin,
+      otmMax: trendOtmMax,
+      premiumMin: trendPremiumMin,
+      premiumMax: trendPremiumMax,
+      startDate: trendStartDate || "",
+      endDate: trendEndDate || "",
+    });
+  };
+
+  const handleResetTrendFilters = () => {
+    setTrendOptionType("CE");
+    setTrendOtmMin(-50);
+    setTrendOtmMax(50);
+    setTrendPremiumMin(0);
+    setTrendPremiumMax(25);
+    setTrendStartDate("");
+    setTrendEndDate("");
+    setTrendPage(1);
+    setAppliedTrendFilters({
+      optionType: "ALL",
+      otmMin: -50,
+      otmMax: 50,
+      premiumMin: 0,
+      premiumMax: 25,
+      startDate: "",
+      endDate: "",
+    });
+  };
+
+  const strToDate = (s?: string): Date | undefined => {
+    if (!s) return undefined;
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? undefined : d;
+  };
+
+  // Color palette for month-based row coloring (same as ArbitrageDetailsPage)
+  const colorPalette = [
+    "bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50",
+    "bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/30 dark:hover:bg-purple-950/50",
+    "bg-green-50 hover:bg-green-100 dark:bg-green-950/30 dark:hover:bg-green-950/50",
+    "bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50",
+    "bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/30 dark:hover:bg-rose-950/50",
+    "bg-cyan-50 hover:bg-cyan-100 dark:bg-cyan-950/30 dark:hover:bg-cyan-950/50",
+    "bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:hover:bg-indigo-950/50",
+    "bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/30 dark:hover:bg-teal-950/50",
+  ];
+
+  // Month key helper (YYYY-MM)
+  const monthKey = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+  // Create color mapping per month (chronological assignment)
+  const trendColorMap = useMemo(() => {
+    if (!trendData?.length) return new Map<string, string>();
+
+    const map = new Map<string, string>();
+    let colorIndex = 0;
+
+    // Ensure chronological order so months get stable, sequential colors
+    const sorted = [...trendData].sort(
+      (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
+    );
+
+    for (const row of sorted) {
+      const d = new Date(row.time);
+      if (Number.isNaN(d.getTime())) continue;
+      const key = monthKey(d);
+      if (!map.has(key)) {
+        map.set(key, colorPalette[colorIndex % colorPalette.length]);
+        colorIndex++;
+      }
+    }
+
+    return map;
+  }, [trendData]);
+
+  // Helper to get row color based on row date month
+  const getTrendRowColor = (dateStr: string) => {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return "";
+    const key = monthKey(d);
+    return trendColorMap.get(key) || "";
+  };
+
+  // Pagination handlers for trend section
+  const handleTrendPreviousPage = () => {
+    if (trendPage > 1) {
+      setTrendPage((prev) => prev - 1);
+    }
+  };
+
+  const handleTrendNextPage = () => {
+    if (trendPagination && trendPagination.hasMore) {
+      setTrendPage((prev) => prev + 1);
+    }
+  };
+
+  const handleTrendPageClick = (page: number) => {
+    setTrendPage(page);
+  };
+
+  // Trend table sort handler
+  const handleTrendSortColumn = (key: TrendSortKey) => {
+    setTrendSortConfig((prev) => {
+      if (prev?.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  };
+
+  // Sorted trend data
+  const sortedTrendData = useMemo(() => {
+    if (!trendData || !trendSortConfig) return trendData;
+
+    const { key, direction } = trendSortConfig;
+    const multiplier = direction === "asc" ? 1 : -1;
+
+    const getValue = (row: CoveredCallsTrendRow): number | string => {
+      switch (key) {
+        case "underlying":
+          return row.underlying ?? "";
+        case "time":
+          return row.time ? new Date(row.time).getTime() : Number.NaN;
+        case "underlying_price":
+          return typeof row.underlying_price === "number"
+            ? row.underlying_price
+            : parseFloat(String(row.underlying_price ?? "NaN"));
+        case "strike":
+          return typeof row.strike === "number"
+            ? row.strike
+            : parseFloat(String(row.strike ?? "NaN"));
+        case "expiry_month":
+          return row.expiry_month ?? "";
+        case "option_type":
+          return row.option_type ?? "";
+        case "premium":
+          return typeof row.premium === "number"
+            ? row.premium
+            : parseFloat(String(row.premium ?? "NaN"));
+        case "volume":
+          return typeof row.volume === "number"
+            ? row.volume
+            : parseFloat(String(row.volume ?? "NaN"));
+        case "otm":
+          return typeof row.otm === "number"
+            ? row.otm
+            : parseFloat(String(row.otm ?? "NaN"));
+        case "premium_percentage":
+          return typeof row.premium_percentage === "number"
+            ? row.premium_percentage
+            : parseFloat(String(row.premium_percentage ?? "NaN"));
+        default:
+          return "";
+      }
+    };
+
+    const copy = [...trendData];
+    copy.sort((a, b) => {
+      const av = getValue(a);
+      const bv = getValue(b);
+
+      const aIsNumber = typeof av === "number";
+      const bIsNumber = typeof bv === "number";
+
+      if (aIsNumber && bIsNumber) {
+        const aNum = av as number;
+        const bNum = bv as number;
+        const aNaN = Number.isNaN(aNum);
+        const bNaN = Number.isNaN(bNum);
+        if (aNaN && bNaN) return 0;
+        if (aNaN) return 1;
+        if (bNaN) return -1;
+        if (aNum === bNum) return 0;
+        return aNum > bNum ? 1 * multiplier : -1 * multiplier;
+      }
+
+      const aStr = String(av);
+      const bStr = String(bv);
+      if (aStr === bStr) return 0;
+      return aStr > bStr ? 1 * multiplier : -1 * multiplier;
+    });
+
+    return copy;
+  }, [trendData, trendSortConfig]);
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -1076,6 +1490,536 @@ export default function CoveredCallsDetailsPage() {
                 </TableBody>
               </Table>
               </TooltipProvider>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Trend Analysis Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Options Trend Analysis</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Filters */}
+          <Card>
+            <CardContent className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+                {/* Trend Type */}
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Label htmlFor="trend-type" className="text-sm">
+                      Daily
+                    </Label>
+                    <Switch
+                      id="trend-type"
+                      checked={trendType === "hourly"}
+                      onCheckedChange={(checked) => {
+                        setTrendType(checked ? "hourly" : "daily");
+                      }}
+                    />
+                    <Label htmlFor="trend-type" className="text-sm">
+                      Hourly
+                    </Label>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResetTrendFilters}
+                >
+                  Reset Filters
+                </Button>
+              </div>
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                
+                {/* Option Type */}
+                <div className="space-y-6">
+                  <Label className="text-sm font-medium">Option Type</Label>
+                  <RadioGroup
+                    className="flex space-x-2"
+                    value={trendOptionType}
+                    onValueChange={(value: "ALL" | "CE" | "PE") => {
+                      setTrendOptionType(value);
+                    }}
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="ALL" id="trend-all" />
+                      <Label htmlFor="trend-all" className="text-sm font-normal">
+                        All
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="CE" id="trend-ce" />
+                      <Label htmlFor="trend-ce" className="text-sm font-normal">
+                        Call (CE)
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="PE" id="trend-pe" />
+                      <Label htmlFor="trend-pe" className="text-sm font-normal">
+                        Put (PE)
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                {/* OTM % Range */}
+                <div className="space-y-8">
+                  <Label className="text-sm font-medium">OTM Range (%)</Label>
+                  <div className="space-y-4">
+                    <div className="relative w-full px-3">
+                      <div className="relative">
+                        <Slider
+                          value={[trendOtmMin, trendOtmMax]}
+                          onValueChange={(value) => {
+                            setTrendOtmMin(value[0]);
+                            setTrendOtmMax(value[1]);
+                          }}
+                          min={-100}
+                          max={100}
+                          step={1}
+                          className="w-full
+                            [&_[role=slider]]:h-5
+                            [&_[role=slider]]:w-5
+                            [&_[role=slider]]:border-2
+                            [&_[role=slider]]:border-primary
+                            [&_[role=slider]]:bg-background
+                            [&_[role=slider]]:shadow-lg
+                            [&>.relative]:h-2
+                            [&_.bg-primary]:bg-primary"
+                        />
+
+                        {[
+                          { val: trendOtmMin, key: "min" },
+                          { val: trendOtmMax, key: "max" },
+                        ].map((item, idx) => (
+                          <div
+                            key={item.key}
+                            className="absolute -top-8 transform -translate-x-1/2"
+                            style={{
+                              left: `${((item.val + 100) / 200) * 100}%`,
+                            }}
+                          >
+                            <Input
+                              type="text"
+                              pattern="^-?\\d+$"
+                              title="Enter digits"
+                              value={item.val}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 0;
+                                if (idx === 0) {
+                                  setTrendOtmMin(
+                                    Math.max(-100, Math.min(value, trendOtmMax))
+                                  );
+                                } else {
+                                  setTrendOtmMax(
+                                    Math.min(100, Math.max(value, trendOtmMin))
+                                  );
+                                }
+                              }}
+                              className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>-100</span>
+                        <span>0</span>
+                        <span>+100</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Premium % Range */}
+                <div className="space-y-8">
+                  <Label className="text-sm font-medium">Premium % Range</Label>
+                  <div className="space-y-4">
+                    <div className="relative w-full px-3">
+                      <div className="relative">
+                        <Slider
+                          value={[trendPremiumMin, trendPremiumMax]}
+                          onValueChange={(value) => {
+                            setTrendPremiumMin(value[0]);
+                            setTrendPremiumMax(value[1]);
+                          }}
+                          min={0}
+                          max={50}
+                          step={1}
+                          className="w-full
+                            [&_[role=slider]]:h-5
+                            [&_[role=slider]]:w-5
+                            [&_[role=slider]]:border-2
+                            [&_[role=slider]]:border-primary
+                            [&_[role=slider]]:bg-background
+                            [&_[role=slider]]:shadow-lg
+                            [&>.relative]:h-2
+                            [&_.bg-primary]:bg-primary"
+                        />
+
+                        {[
+                          { val: trendPremiumMin, key: "min" },
+                          { val: trendPremiumMax, key: "max" },
+                        ].map((item, idx) => (
+                          <div
+                            key={item.key}
+                            className="absolute -top-8 transform -translate-x-1/2"
+                            style={{
+                              left: `${(item.val / 100) * 200}%`,
+                            }}
+                          >
+                            <Input
+                              type="text"
+                              pattern="^\\d+$"
+                              title="Enter digits"
+                              value={item.val}
+                              onChange={(e) => {
+                                const value = parseInt(e.target.value) || 0;
+                                if (idx === 0) {
+                                  setTrendPremiumMin(
+                                    Math.max(0, Math.min(value, trendPremiumMax))
+                                  );
+                                } else {
+                                  setTrendPremiumMax(
+                                    Math.min(25, Math.max(value, trendPremiumMin))
+                                  );
+                                }
+                              }}
+                              className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
+                        <span>0</span>
+                        <span>50</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Date Range */}
+                <div className="space-y-4">
+                  <Label className="text-sm font-medium">Date Range</Label>
+                  <div className="grid gap-2 grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center">
+                    <div className="flex-1 flex flex-col">
+                      <span className="text-[10px] text-muted-foreground sm:hidden mb-1">
+                        From
+                      </span>
+                      <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
+                        <Input
+                          type="text"
+                          placeholder="YYYY-MM-DD"
+                          value={trendStartDate}
+                          onChange={(e) => setTrendStartDate(e.target.value)}
+                          className="h-9 text-sm sm:text-xs w-full"
+                          autoComplete="off"
+                          inputMode="numeric"
+                        />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                            >
+                              <CalendarIcon className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="p-0">
+                            <Calendar
+                              mode="single"
+                              selected={strToDate(trendStartDate)}
+                              onSelect={(d) =>
+                                setTrendStartDate(
+                                  d ? d.toISOString().split("T")[0] : ""
+                                )
+                              }
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                    <div className="text-center text-xs text-muted-foreground py-1">
+                      to
+                    </div>
+                    <div className="flex-1 flex flex-col">
+                      <span className="text-[10px] text-muted-foreground sm:hidden mb-1">
+                        To
+                      </span>
+                      <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
+                        <Input
+                          type="text"
+                          placeholder="YYYY-MM-DD"
+                          value={trendEndDate}
+                          onChange={(e) => setTrendEndDate(e.target.value)}
+                          className="h-9 text-sm sm:text-xs w-full"
+                          autoComplete="off"
+                          inputMode="numeric"
+                        />
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              className="h-9 w-9"
+                            >
+                              <CalendarIcon className="h-4 w-4" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" className="p-0">
+                            <Calendar
+                              mode="single"
+                              selected={strToDate(trendEndDate)}
+                              onSelect={(d) =>
+                                setTrendEndDate(
+                                  d ? d.toISOString().split("T")[0] : ""
+                                )
+                              }
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-4 flex justify-end">
+                <Button
+                  onClick={handleApplyTrendFilters}
+                  disabled={trendLoading}
+                  variant="default"
+                  size="sm"
+                >
+                  Apply Filters
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Trend Data Table */}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableTableHeader
+                    sortKey="underlying"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Underlying
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="time"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Time
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="underlying_price"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Underlying Price
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="strike"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Strike
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="expiry_month"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Expiry Month
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="option_type"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Option Type
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="premium"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Premium
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="volume"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Volume
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="otm"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    OTM (%)
+                  </SortableTableHeader>
+                  <SortableTableHeader
+                    sortKey="premium_percentage"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Premium %
+                  </SortableTableHeader>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trendLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center">
+                      Loading...
+                    </TableCell>
+                  </TableRow>
+                ) : trendError ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={10}
+                      className="text-center text-red-600"
+                    >
+                      Error: {trendError}
+                    </TableCell>
+                  </TableRow>
+                ) : sortedTrendData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center">
+                      No trend data available.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  sortedTrendData.map((row, idx) => (
+                    <TableRow
+                      key={`${row.underlying}-${row.time}-${idx}`}
+                      className={getTrendRowColor(row.time)}
+                    >
+                      <TableCell className="text-center">
+                        {row.underlying}
+                      </TableCell>
+                      <TableCell className="text-center">{row.time}</TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.underlying_price)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.strike, 2)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {row.expiry_month}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant={row.option_type === "CE" ? "default" : "secondary"}
+                        >
+                          {row.option_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.premium)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.volume, 0)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.otm)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {formatNumber(row.premium_percentage)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Trend Pagination */}
+          {trendPagination && trendPagination.totalPages > 1 && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">
+                Showing {(trendPage - 1) * trendPagination.limit + 1} to{" "}
+                {Math.min(trendPage * trendPagination.limit, trendPagination.total)} of{" "}
+                {trendPagination.total} rows
+              </p>
+
+              <div className="flex items-center gap-2">
+                {/* Previous Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTrendPreviousPage}
+                  disabled={trendPage === 1 || trendLoading}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+
+                {/* Page Numbers */}
+                <div className="flex items-center gap-1">
+                  {getTrendPageNumbers().map((pageNum, idx) =>
+                    pageNum === "..." ? (
+                      <span
+                        key={`ellipsis-${idx}`}
+                        className="px-2 text-muted-foreground"
+                      >
+                        ...
+                      </span>
+                    ) : (
+                      <Button
+                        key={pageNum}
+                        variant={
+                          trendPage === pageNum ? "default" : "outline"
+                        }
+                        size="sm"
+                        onClick={() => handleTrendPageClick(pageNum as number)}
+                        disabled={trendLoading}
+                        className="min-w-[40px]"
+                      >
+                        {pageNum}
+                      </Button>
+                    )
+                  )}
+                </div>
+
+                {/* Next Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTrendNextPage}
+                  disabled={!trendPagination.hasMore || trendLoading}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Pagination Info (when only 1 page) */}
+          {trendPagination && trendPagination.totalPages === 1 && (
+            <div className="flex items-center justify-center">
+              <p className="text-sm text-muted-foreground">
+                Showing all {trendPagination.total} rows
+              </p>
             </div>
           )}
         </CardContent>
