@@ -112,7 +112,11 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 };
 
 // const formatTime = (ts?: string) => (ts ? new Date(ts).toLocaleTimeString() : "-");
-const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB") : "-");
+const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",  // 2-digit year → dd/mm/yy
+      }) : "-");
 
 // function OptionLiveBox({
 //   title,
@@ -447,7 +451,7 @@ export default function CoveredCallsDetailsPage() {
 
   // Historical fallback detection and fetch
   const STALE_MS = Number((import.meta as any).env?.VITE_LIVE_STALE_MS) || 15000; // configurable via VITE_LIVE_STALE_MS
-  const [historicalMode, setHistoricalMode] = useState(false);
+  const [historicalMode, setHistoricalMode] = useState(true); // Start with historical data
   const [historicalLastDate, setHistoricalLastDate] = useState<string | null>(null);
   const [historicalLoadedAt, setHistoricalLoadedAt] = useState<number | null>(null);
   const [isReloadingFallback, setIsReloadingFallback] = useState(false);
@@ -473,38 +477,8 @@ export default function CoveredCallsDetailsPage() {
     return arr;
   }, [subscriptionSymbols, strikeGroups]);
 
-  // Evaluate staleness periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // If socket disconnected, go historical
-      if (!isConnected) {
-        setHistoricalMode(true);
-        return;
-      }
-
-      // If we have symbols but none updated within threshold, go historical
-      const now = Date.now();
-      const expected = expectedSymbols;
-      if (!expected.length) {
-        // If we don't even have expected symbols yet but nothing has updated, prefer historical as a safety net
-        setHistoricalMode(true);
-        return;
-      }
-      let allStale = true;
-      for (const s of expected) {
-        const ts = lastTimestampsRef.current[s];
-        if (ts) {
-          const age = now - new Date(ts).getTime();
-          if (age < STALE_MS) {
-            allStale = false;
-            break;
-          }
-        }
-      }
-      setHistoricalMode(allStale);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [isConnected, expectedSymbols, STALE_MS]);
+  // Don't automatically switch modes based on staleness
+  // Only switch to live when receiving socket data (handled in multiSymbolData useEffect)
 
   // When expiry changes, reset snapshots and historical metadata to avoid mixing expiries
   useEffect(() => {
@@ -513,6 +487,8 @@ export default function CoveredCallsDetailsPage() {
     setHighlighted({});
     setHistoricalLastDate(null);
     setHistoricalLoadedAt(null);
+    // Start with historical mode when expiry changes
+    setHistoricalMode(true);
   }, [selectedExpiry]);
 
   // Historical fetch (reusable)
@@ -569,7 +545,7 @@ export default function CoveredCallsDetailsPage() {
     [instrumentId, selectedExpiry]
   );
 
-  // Fetch historical data once per fallback event
+  // Fetch historical data when in historical mode
   useEffect(() => {
     if (historicalMode && selectedExpiry) {
       if (!historicalLoadedAt || Date.now() - historicalLoadedAt > 30000) {
@@ -578,12 +554,7 @@ export default function CoveredCallsDetailsPage() {
     }
   }, [historicalMode, historicalLoadedAt, fetchHistorical, selectedExpiry]);
 
-  // If market is closed, immediately switch to historical mode (no 15s wait)
-  useEffect(() => {
-    if (!isMarketOpen) {
-      setHistoricalMode(true);
-    }
-  }, [isMarketOpen]);
+  // No automatic mode switching - let socket data control the switch to live mode
 
   // Populate initial selected row (from list) as last fallback for its strike/side
   useEffect(() => {
@@ -618,6 +589,11 @@ export default function CoveredCallsDetailsPage() {
 
   // Update snapshots only for symbols with new data
   useEffect(() => {
+    // If we're receiving live data from socket, switch to live mode
+    if (Object.keys(multiSymbolData).length > 0 && isConnected) {
+      setHistoricalMode(false);
+    }
+
     Object.entries(multiSymbolData).forEach(([symbol, data]) => {
       const idx = symbolIndex.get(symbol);
       if (!idx) return;
@@ -674,7 +650,7 @@ export default function CoveredCallsDetailsPage() {
         });
       }, 800);
     });
-  }, [multiSymbolData, symbolIndex]);
+  }, [multiSymbolData, symbolIndex, isConnected]);
 
   // Refresh subscriptions (global)
   const [, setIsRefreshing] = useState(false);
@@ -1087,18 +1063,10 @@ export default function CoveredCallsDetailsPage() {
               Covered Calls - Live Details
             </h1>
           </div>
-          <p className="text-sm text-muted-foreground">Instrument ID: {instrumentId}</p>
-          {underlyingSymbol && (
-            <div className="flex items-center gap-3 text-sm">
-              <div className="font-medium">{underlyingSymbol}</div>
-              <div className="rounded border px-2 py-0.5 bg-muted font-mono tabular-nums">
-                {underlyingPrice !== undefined ? formatNumber(underlyingPrice) : "-"}
-              </div>
-            </div>
-          )}
+          {/* <p className="text-sm text-muted-foreground">Instrument ID: {instrumentId}</p> */}
         </div>
         <div>
-          <Button
+          {/* <Button
             variant="outline"
             size="sm"
             onClick={() =>
@@ -1115,7 +1083,7 @@ export default function CoveredCallsDetailsPage() {
             {sortConfig?.key === "strike" && sortConfig.direction === "desc"
               ? "Desc"
               : "Asc"}
-          </Button>
+          </Button> */}
         </div>
       </div>
 
@@ -1124,8 +1092,33 @@ export default function CoveredCallsDetailsPage() {
       {/* Live/Historical banner */}
       <Card className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
         <CardContent className="py-3 flex items-center justify-between gap-4">
-          {/* Left: Live/Historical status + last updated date */}
-          <div className="flex items-center gap-3">
+          {underlyingSymbol && (
+            <div className="flex items-center gap-3 text-sm">
+              <div>Underlying Symbol :</div>
+              <div className="font-medium">{underlyingSymbol}</div>
+            </div>
+          )}
+          {underlyingSymbol && (
+            <div className="flex items-center gap-3 text-sm">
+              <div>Underlying Price :</div>
+              <div className="px-2 py-0.5 font-mono font-medium tabular-nums">
+                {underlyingPrice !== undefined ? formatNumber(underlyingPrice) : "-"}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      
+
+      {/* <div className="gap-2 grid grid-cols-2 w-full">
+        <CronStatusCard jobName="loginJob" displayName="Daily Ticks NSE Options Job" />
+        <CronStatusCard jobName="hourlyTicksNseOptJob" displayName="Hourly Ticks NSE Options Job" />
+      </div> */}
+
+      <Card>
+        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="py-3 flex items-center justify-between gap-4"><div className="flex items-center gap-3">
             <div
               className={`px-2 py-1 rounded text-xs font-medium ${
                 historicalMode
@@ -1141,19 +1134,8 @@ export default function CoveredCallsDetailsPage() {
               </div>
             )}
           </div>
-
-          {/* Right: connection + market + stale info + actions */}
+          </CardTitle>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              {/* {isConnected ? (
-                <Wifi className="h-4 w-4 text-green-500" />
-              ) : (
-                <WifiOff className="h-4 w-4 text-gray-400" />
-              )} */}
-              {/* <span className="text-sm">
-                Connection: {isConnected ? "Connected" : "Disconnected"}
-              </span> */}
-            </div>
             <div className="flex items-center gap-2">
               <span className={`h-2 w-2 rounded-full ${isMarketOpen ? "bg-green-500" : "bg-gray-400"}`} />
               <span className="text-sm">Market: {isMarketOpen ? "Open" : "Closed"}</span>
@@ -1184,6 +1166,22 @@ export default function CoveredCallsDetailsPage() {
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+            {/* <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={!isConnected || !isMarketOpen || isRefreshing}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
+              Refresh Live
+            </Button> */}
+            {error && (
+              <span className="text-xs text-red-600 truncate max-w-[320px]">
+                {error}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
             {historicalMode && (
               <Button
                 variant="outline"
@@ -1202,35 +1200,6 @@ export default function CoveredCallsDetailsPage() {
                 Reload
               </Button>
             )}
-            {/* <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={!isConnected || !isMarketOpen || isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-              Refresh Live
-            </Button> */}
-            {error && (
-              <span className="text-xs text-red-600 truncate max-w-[320px]">
-                {error}
-              </span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      
-
-      {/* <div className="gap-2 grid grid-cols-2 w-full">
-        <CronStatusCard jobName="loginJob" displayName="Daily Ticks NSE Options Job" />
-        <CronStatusCard jobName="hourlyTicksNseOptJob" displayName="Hourly Ticks NSE Options Job" />
-      </div> */}
-
-      <Card>
-        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>Live Market Data</CardTitle>
-          <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Expiry</span>
             <Select
               value={selectedExpiry ?? ""}
@@ -1825,15 +1794,7 @@ export default function CoveredCallsDetailsPage() {
                     onSort={handleTrendSortColumn as any}
                     align="center"
                   >
-                    Underlying Price
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="strike"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Strike
+                    Price
                   </SortableTableHeader>
                   <SortableTableHeader
                     sortKey="expiry_month"
@@ -1844,12 +1805,20 @@ export default function CoveredCallsDetailsPage() {
                     Expiry Month
                   </SortableTableHeader>
                   <SortableTableHeader
+                    sortKey="strike"
+                    sortConfig={trendSortConfig as any}
+                    onSort={handleTrendSortColumn as any}
+                    align="center"
+                  >
+                    Strike
+                  </SortableTableHeader>
+                  <SortableTableHeader
                     sortKey="option_type"
                     sortConfig={trendSortConfig as any}
                     onSort={handleTrendSortColumn as any}
                     align="center"
                   >
-                    Option Type
+                    Type
                   </SortableTableHeader>
                   <SortableTableHeader
                     sortKey="premium"
@@ -1916,7 +1885,7 @@ export default function CoveredCallsDetailsPage() {
                       <TableCell className="text-center">
                         {row.underlying}
                       </TableCell>
-                      <TableCell className="text-center">{row.time}</TableCell>
+                      <TableCell className="text-center">{trendType !== "daily" ? formatDateOnly(row.time)+" "+row.time.split(" ")[1]+" "+row.time.split(" ")[2] : formatDateOnly(row.time)}</TableCell>
                       <TableCell className="text-center">
                         {formatNumber(row.underlying_price)}
                       </TableCell>

@@ -229,6 +229,12 @@ export default function ArbitrageDetailsPage() {
     };
   }, [appliedFilters.startDate, appliedFilters.endDate]);
 
+  const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",  // 2-digit year → dd/mm/yy
+      }) : "-")
+
   // Fetch filtered arbitrage data
   const {
     data: filteredData,
@@ -594,12 +600,9 @@ export default function ArbitrageDetailsPage() {
             </Button>
             <h1 className="text-3xl font-bold tracking-tight">{state.name}</h1>
             <Badge variant="outline">
-              {new Date(state.date).toLocaleDateString()}
+              {formatDateOnly(state.date)}
             </Badge>
           </div>
-          <p className="text-sm text-muted-foreground">
-            Instrument ID: {state.instrumentid}
-          </p>
         </div>
       </div>
 
@@ -610,31 +613,15 @@ export default function ArbitrageDetailsPage() {
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Equity Date Range (Daily)</CardTitle>
-            <CardTitle>From: <span className='font-medium text-foreground'>{equityRange.min_date ? new Date(equityRange.min_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium text-foreground'>{equityRange.max_date ? new Date(equityRange.max_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium text-foreground'>{equityRange.min_date && formatDateOnly(equityRange.min_date)}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium text-foreground'>{equityRange.max_date && formatDateOnly(equityRange.max_date)}</span></CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Futures Date Range (Daily)</CardTitle>
-            <CardTitle>From: <span className='font-medium'>{futuresRange.min_date ? new Date(futuresRange.min_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium'>{futuresRange.max_date ? new Date(futuresRange.max_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium'>{futuresRange.min_date && formatDateOnly(futuresRange.min_date)}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium'>{futuresRange.max_date && formatDateOnly(futuresRange.max_date)}</span></CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -644,41 +631,15 @@ export default function ArbitrageDetailsPage() {
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Equity Date Range (Hourly)</CardTitle>
-            <CardTitle>From: <span className='font-medium'>{equityRange.hourly_min_date ? new Date(equityRange.hourly_min_date).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium'>{equityRange.hourly_max_date ? new Date(equityRange.hourly_max_date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium'>{equityRange.hourly_min_date && formatDateOnly(equityRange.hourly_min_date)+" "+equityRange.hourly_min_date.split(" ")[1]+" "+equityRange.hourly_min_date.split(" ")[2]}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium'>{equityRange.hourly_max_date && formatDateOnly(equityRange.hourly_max_date)+" "+equityRange.hourly_max_date.split(" ")[1]+" "+equityRange.hourly_max_date.split(" ")[2]}</span></CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Futures Date Range (Hourly)</CardTitle>
-            <CardTitle>From: <span className='font-medium text-foreground'>{futuresRange.hourly_min_date ? new Date(futuresRange.hourly_min_date).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium text-foreground'>{futuresRange.hourly_max_date ? new Date(futuresRange.hourly_max_date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium text-foreground'>{futuresRange.hourly_min_date && formatDateOnly(futuresRange.hourly_min_date)+" "+futuresRange.hourly_min_date.split(" ")[1]+" "+futuresRange.hourly_min_date.split(" ")[2]}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium text-foreground'>{futuresRange.hourly_max_date && formatDateOnly(futuresRange.hourly_max_date)+" "+futuresRange.hourly_max_date.split(" ")[1]+" "+futuresRange.hourly_max_date.split(" ")[2]}</span></CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -714,7 +675,7 @@ export default function ArbitrageDetailsPage() {
               <TableBody>
                 <TableRow>
                   <TableCell className="text-center">{state.name}</TableCell>
-                  <TableCell className="text-center">{state.date}</TableCell>
+                  <TableCell className="text-center">{formatDateOnly(state.date)+" "+state.date.split(" ")[1]+" "+state.date.split(" ")[2]}</TableCell>
                   <TableCell className="text-center">
                     {state.symbol_1}
                   </TableCell>
@@ -1174,7 +1135,7 @@ export default function ArbitrageDetailsPage() {
 
                     const symbolBaseClass =
                       "text-center font-medium";
-                    const symbolBlueClass = "text-blue-800";
+                    const symbolBlueClass = "text-blue-800 font-bold";
 
                     return (
                       <TableRow
@@ -1182,20 +1143,7 @@ export default function ArbitrageDetailsPage() {
                         className={getRowColor(row.date || "-")}
                       >
                       <TableCell className="text-center text-xs">
-                        {timeRange === "hour" ? new Date(row.date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "2-digit",
-                            hour:"numeric",
-                            minute:"2-digit",
-                            hour12: false
-                          }) : new Date(row.date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "2-digit"
-                          })}
+                        {timeRange === "hour" ? formatDateOnly(row.date)+" "+row.date.split(" ")[1]+" "+row.date.split(" ")[2] : formatDateOnly(row.date)}
                       </TableCell>
                       <TableCell
                         className={`${symbolBaseClass} ${

@@ -223,6 +223,12 @@ export function CoveredCallsView() {
     fetchCoveredCallsData(1, defaultFilters);
   };
 
+  const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",  // 2-digit year → dd/mm/yy
+      }) : "-");
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -741,7 +747,7 @@ export function CoveredCallsView() {
                             {option.underlyingSymbol}
                           </TableCell>
                           <TableCell className="text-center font-medium">
-                            {option.time}
+                            {formatDateOnly(option.time)+" "+(option.time.split(" ")[1])+" "+(option.time.split(" ")[2])}
                           </TableCell>
                           <TableCell className="text-center font-mono text-base">
                             {formatPrice(option.underlyingPrice)}

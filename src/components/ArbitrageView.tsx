@@ -180,6 +180,12 @@ export function ArbitrageView() {
     setCurrentPage(1);
   }, [filters, rowsPerPage]);
 
+  const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB",{
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",  // 2-digit year → dd/mm/yy
+      }) : "-")
+
   // Handle row click to navigate to details page in a new tab
   const handleRowClick = (row: ArbitrageData) => {
     const currentDate = new Date().toISOString().split('T')[0]; // Get current date in YYYY-MM-DD format
@@ -263,31 +269,15 @@ export function ArbitrageView() {
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Equity Date Range (Daily)</CardTitle>
-            <CardTitle>From: <span className='font-medium text-foreground'>{equityRange.min_date ? new Date(equityRange.min_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium text-foreground'>{equityRange.max_date ? new Date(equityRange.max_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium text-foreground'>{equityRange.min_date && formatDateOnly(equityRange.min_date)}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium text-foreground'>{equityRange.max_date && formatDateOnly(equityRange.max_date)}</span></CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Futures Date Range (Daily)</CardTitle>
-            <CardTitle>From: <span className='font-medium'>{futuresRange.min_date ? new Date(futuresRange.min_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium'>{futuresRange.max_date ? new Date(futuresRange.max_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium'>{futuresRange.min_date && formatDateOnly(futuresRange.min_date)}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium'>{futuresRange.max_date && formatDateOnly(futuresRange.max_date)}</span></CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -297,41 +287,15 @@ export function ArbitrageView() {
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Equity Date Range (Hourly)</CardTitle>
-            <CardTitle>From: <span className='font-medium'>{equityRange.hourly_min_date ? new Date(equityRange.hourly_min_date).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium'>{equityRange.hourly_max_date ? new Date(equityRange.hourly_max_date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium'>{equityRange.hourly_min_date && formatDateOnly(equityRange.hourly_min_date)+" "+equityRange.hourly_min_date.split(" ")[1]+" "+equityRange.hourly_min_date.split(" ")[2]}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium'>{equityRange.hourly_max_date && formatDateOnly(equityRange.hourly_max_date)+" "+equityRange.hourly_max_date.split(" ")[1]+" "+equityRange.hourly_max_date.split(" ")[2]}</span></CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Futures Date Range (Hourly)</CardTitle>
-            <CardTitle>From: <span className='font-medium text-foreground'>{futuresRange.hourly_min_date ? new Date(futuresRange.hourly_min_date).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium text-foreground'>{futuresRange.hourly_max_date ? new Date(futuresRange.hourly_max_date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium text-foreground'>{futuresRange.hourly_min_date && formatDateOnly(futuresRange.hourly_min_date)+" "+futuresRange.hourly_min_date.split(" ")[1]+" "+futuresRange.hourly_min_date.split(" ")[2]}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium text-foreground'>{futuresRange.hourly_max_date && formatDateOnly(futuresRange.hourly_max_date)+" "+futuresRange.hourly_max_date.split(" ")[1]+" "+futuresRange.hourly_max_date.split(" ")[2]}</span></CardTitle>
           </CardHeader>
         </Card>
       </div>
