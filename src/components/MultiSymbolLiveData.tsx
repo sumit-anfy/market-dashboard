@@ -163,10 +163,6 @@ export function MultiSymbolLiveData({
     if (!isMarketOpen) {
       // Unsubscribe if market is closed
       if (validSymbols.length > 0) {
-        console.log(
-          "🔕 MultiSymbolLiveData: Unsubscribing - Market closed:",
-          validSymbols
-        );
         unsubscribeFromSymbols(validSymbols);
       }
       return;

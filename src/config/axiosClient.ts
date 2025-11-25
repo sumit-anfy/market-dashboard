@@ -62,6 +62,7 @@ class RequestCancellationManager {
 
 // Create singleton instance
 const cancellationManager = new RequestCancellationManager();
+let unauthorizedHandler: (() => void) | null = null;
 
 /**
  * Create configured Axios instance
@@ -80,6 +81,11 @@ const createAxiosInstance = (): AxiosInstance => {
   // Request interceptor - register and cancel previous requests
   instance.interceptors.request.use(
     (config) => {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        config.headers = config.headers ?? {};
+        config.headers.Authorization = `Bearer ${token}`;
+      }
       return cancellationManager.registerRequest(config);
     },
     (error) => {
@@ -105,6 +111,13 @@ const createAxiosInstance = (): AxiosInstance => {
         return Promise.reject({ cancelled: true, message: error.message });
       }
 
+      if (error.response?.status === 401) {
+        localStorage.removeItem('authToken');
+        if (unauthorizedHandler) {
+          unauthorizedHandler();
+        }
+      }
+
       // Handle other errors
       const errorMessage = error.response?.data?.message || error.message || 'An error occurred';
       console.error(`[API Error] ${error.config?.url}:`, errorMessage);
@@ -126,4 +139,18 @@ export const apiClient = createAxiosInstance();
 // Export manager for cleanup
 export const cancelAllPendingRequests = () => {
   cancellationManager.cancelAllRequests();
+};
+
+export const setAuthTokenHeader = (token: string | null) => {
+  if (token) {
+    apiClient.defaults.headers.common.Authorization = `Bearer ${token}`;
+    localStorage.setItem('authToken', token);
+  } else {
+    delete apiClient.defaults.headers.common.Authorization;
+    localStorage.removeItem('authToken');
+  }
+};
+
+export const setUnauthorizedHandler = (handler: (() => void) | null) => {
+  unauthorizedHandler = handler;
 };

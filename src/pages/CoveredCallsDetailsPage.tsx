@@ -1,46 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { apiClient } from "@/config/axiosClient";
 import { config } from "@/config/api";
-import { ArrowLeft, RefreshCw, Info, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-// import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-// import { CronStatusCard } from "@/components/CronStatusCard";
+import { CoveredCallsHeader } from "@/components/covered-calls-details/CoveredCallsHeader";
+import { CoveredCallsBanner } from "@/components/covered-calls-details/CoveredCallsBanner";
+import { CoveredCallsLiveTable } from "@/components/covered-calls-details/CoveredCallsLiveTable";
+import { CoveredCallsTrendFilters } from "@/components/covered-calls-details/CoveredCallsTrendFilters";
+import { CoveredCallsTrendTable } from "@/components/covered-calls-details/CoveredCallsTrendTable";
 import { useCoveredCallsDetails } from "@/hooks/useCoveredCallsDetails";
 import { useCoveredCallsFilters } from "@/hooks/useCoveredCallsFilters";
 import { useSocketIO } from "@/hooks/useSocketIO";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  TooltipProvider,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "@/components/ui/tooltip";
-import { SortableTableHeader } from "@/components/modal/SortableTableHeader";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Slider } from "@/components/ui/slider";
-import { Switch } from "@/components/ui/switch";
 import type { CoveredCallsTrendRow, CoveredCallsTrendResponse } from "@/types/market";
 
 type OptionSide = "CE" | "PE";
@@ -105,14 +75,7 @@ interface StrikeGroup {
   pe?: { symbol: string };
 }
 
-const formatNumber = (num: number | undefined, decimals = 2) => {
-  return num !== null && num !== undefined && !Number.isNaN(num)
-    ? Number(num).toFixed(decimals)
-    : "-";
-};
 
-// const formatTime = (ts?: string) => (ts ? new Date(ts).toLocaleTimeString() : "-");
-const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB") : "-");
 
 // function OptionLiveBox({
 //   title,
@@ -172,7 +135,7 @@ const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("e
 
 export default function CoveredCallsDetailsPage() {
   const { instrumentId } = useParams<{ instrumentId: string }>();
-  const navigate = useNavigate();
+
   const [searchParams] = useSearchParams();
 
   // Market hours (9:00–16:00 IST)
@@ -446,8 +409,8 @@ export default function CoveredCallsDetailsPage() {
   }, [snapshots]);
 
   // Historical fallback detection and fetch
-  const STALE_MS = Number((import.meta as any).env?.VITE_LIVE_STALE_MS) || 15000; // configurable via VITE_LIVE_STALE_MS
-  const [historicalMode, setHistoricalMode] = useState(false);
+  // const STALE_MS = Number((import.meta as any).env?.VITE_LIVE_STALE_MS) || 15000; // configurable via VITE_LIVE_STALE_MS
+  const [historicalMode, setHistoricalMode] = useState(true); // Start with historical data
   const [historicalLastDate, setHistoricalLastDate] = useState<string | null>(null);
   const [historicalLoadedAt, setHistoricalLoadedAt] = useState<number | null>(null);
   const [isReloadingFallback, setIsReloadingFallback] = useState(false);
@@ -463,48 +426,18 @@ export default function CoveredCallsDetailsPage() {
   );
 
   // Build a comprehensive expected symbol list (subs or from groups)
-  const expectedSymbols = useMemo(() => {
-    if (subscriptionSymbols.length) return subscriptionSymbols;
-    const arr: string[] = [];
-    strikeGroups.forEach((g) => {
-      if (g.ce?.symbol) arr.push(g.ce.symbol);
-      if (g.pe?.symbol) arr.push(g.pe.symbol);
-    });
-    return arr;
-  }, [subscriptionSymbols, strikeGroups]);
+  // const expectedSymbols = useMemo(() => {
+  //   if (subscriptionSymbols.length) return subscriptionSymbols;
+  //   const arr: string[] = [];
+  //   strikeGroups.forEach((g) => {
+  //     if (g.ce?.symbol) arr.push(g.ce.symbol);
+  //     if (g.pe?.symbol) arr.push(g.pe.symbol);
+  //   });
+  //   return arr;
+  // }, [subscriptionSymbols, strikeGroups]);
 
-  // Evaluate staleness periodically
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // If socket disconnected, go historical
-      if (!isConnected) {
-        setHistoricalMode(true);
-        return;
-      }
-
-      // If we have symbols but none updated within threshold, go historical
-      const now = Date.now();
-      const expected = expectedSymbols;
-      if (!expected.length) {
-        // If we don't even have expected symbols yet but nothing has updated, prefer historical as a safety net
-        setHistoricalMode(true);
-        return;
-      }
-      let allStale = true;
-      for (const s of expected) {
-        const ts = lastTimestampsRef.current[s];
-        if (ts) {
-          const age = now - new Date(ts).getTime();
-          if (age < STALE_MS) {
-            allStale = false;
-            break;
-          }
-        }
-      }
-      setHistoricalMode(allStale);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, [isConnected, expectedSymbols, STALE_MS]);
+  // Don't automatically switch modes based on staleness
+  // Only switch to live when receiving socket data (handled in multiSymbolData useEffect)
 
   // When expiry changes, reset snapshots and historical metadata to avoid mixing expiries
   useEffect(() => {
@@ -513,6 +446,8 @@ export default function CoveredCallsDetailsPage() {
     setHighlighted({});
     setHistoricalLastDate(null);
     setHistoricalLoadedAt(null);
+    // Start with historical mode when expiry changes
+    setHistoricalMode(true);
   }, [selectedExpiry]);
 
   // Historical fetch (reusable)
@@ -569,7 +504,16 @@ export default function CoveredCallsDetailsPage() {
     [instrumentId, selectedExpiry]
   );
 
-  // Fetch historical data once per fallback event
+  const handleReload = async () => {
+    setIsReloadingFallback(true);
+    try {
+      await fetchHistorical();
+    } finally {
+      setIsReloadingFallback(false);
+    }
+  };
+
+  // Fetch historical data when in historical mode
   useEffect(() => {
     if (historicalMode && selectedExpiry) {
       if (!historicalLoadedAt || Date.now() - historicalLoadedAt > 30000) {
@@ -578,12 +522,7 @@ export default function CoveredCallsDetailsPage() {
     }
   }, [historicalMode, historicalLoadedAt, fetchHistorical, selectedExpiry]);
 
-  // If market is closed, immediately switch to historical mode (no 15s wait)
-  useEffect(() => {
-    if (!isMarketOpen) {
-      setHistoricalMode(true);
-    }
-  }, [isMarketOpen]);
+  // No automatic mode switching - let socket data control the switch to live mode
 
   // Populate initial selected row (from list) as last fallback for its strike/side
   useEffect(() => {
@@ -618,6 +557,11 @@ export default function CoveredCallsDetailsPage() {
 
   // Update snapshots only for symbols with new data
   useEffect(() => {
+    // If we're receiving live data from socket, switch to live mode
+    if (Object.keys(multiSymbolData).length > 0 && isConnected) {
+      setHistoricalMode(false);
+    }
+
     Object.entries(multiSymbolData).forEach(([symbol, data]) => {
       const idx = symbolIndex.get(symbol);
       if (!idx) return;
@@ -674,19 +618,9 @@ export default function CoveredCallsDetailsPage() {
         });
       }, 800);
     });
-  }, [multiSymbolData, symbolIndex]);
+  }, [multiSymbolData, symbolIndex, isConnected]);
 
-  // Refresh subscriptions (global)
-  const [, setIsRefreshing] = useState(false);
-  const handleRefresh = () => {
-    if (!isConnected || !isMarketOpen || !subscriptionSymbols.length) return;
-    setIsRefreshing(true);
-    unsubscribeFromSymbols(subscriptionSymbols);
-    setTimeout(() => {
-      subscribeToSymbols(subscriptionSymbols);
-      setIsRefreshing(false);
-    }, 500);
-  };
+
 
   // ---------- Trend Section State ----------
   type TrendType = "daily" | "hourly";
@@ -1077,423 +1011,38 @@ export default function CoveredCallsDetailsPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/covered-calls")}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-3xl font-bold tracking-tight">
-              Covered Calls - Live Details
-            </h1>
-          </div>
-          <p className="text-sm text-muted-foreground">Instrument ID: {instrumentId}</p>
-          {underlyingSymbol && (
-            <div className="flex items-center gap-3 text-sm">
-              <div className="font-medium">{underlyingSymbol}</div>
-              <div className="rounded border px-2 py-0.5 bg-muted font-mono tabular-nums">
-                {underlyingPrice !== undefined ? formatNumber(underlyingPrice) : "-"}
-              </div>
-            </div>
-          )}
-        </div>
-        <div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              setSortConfig((prev) => {
-                const nextDirection: SortDirection =
-                  prev?.key === "strike" && prev.direction === "asc"
-                    ? "desc"
-                    : "asc";
-                return { key: "strike", direction: nextDirection };
-              })
-            }
-          >
-            Sort Strike:{" "}
-            {sortConfig?.key === "strike" && sortConfig.direction === "desc"
-              ? "Desc"
-              : "Asc"}
-          </Button>
-        </div>
-      </div>
+      <CoveredCallsHeader />
 
-      <Separator />
-
-      {/* Live/Historical banner */}
-      <Card className="sticky top-0 z-30 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-        <CardContent className="py-3 flex items-center justify-between gap-4">
-          {/* Left: Live/Historical status + last updated date */}
-          <div className="flex items-center gap-3">
-            <div
-              className={`px-2 py-1 rounded text-xs font-medium ${
-                historicalMode
-                  ? "bg-yellow-100 text-yellow-900 dark:bg-yellow-900/30 dark:text-yellow-300"
-                  : "bg-green-100 text-green-900 dark:bg-green-900/30 dark:text-green-300"
-              }`}
-            >
-              {historicalMode ? "HISTORICAL DATA" : "LIVE DATA"}
-            </div>
-            {historicalMode && historicalLastDate && (
-              <div className="text-xs text-muted-foreground">
-                Last updated on: {new Date(historicalLastDate).toLocaleDateString("en-GB")}
-              </div>
-            )}
-          </div>
-
-          {/* Right: connection + market + stale info + actions */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              {/* {isConnected ? (
-                <Wifi className="h-4 w-4 text-green-500" />
-              ) : (
-                <WifiOff className="h-4 w-4 text-gray-400" />
-              )} */}
-              {/* <span className="text-sm">
-                Connection: {isConnected ? "Connected" : "Disconnected"}
-              </span> */}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${isMarketOpen ? "bg-green-500" : "bg-gray-400"}`} />
-              <span className="text-sm">Market: {isMarketOpen ? "Open" : "Closed"}</span>
-            </div>
-            {/* <div className="text-xs text-muted-foreground">
-              Stale threshold: {Math.round(STALE_MS / 1000)}s
-            </div> */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Info className="h-4 w-4 mr-2" /> Details
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs">
-                  <div className="space-y-1">
-                    <div className="font-medium mb-1">Last live timestamps</div>
-                    {lastSeen.length === 0 ? (
-                      <div className="text-xs">No symbols</div>
-                    ) : (
-                      lastSeen.slice(0, 10).map((it) => (
-                        <div key={it.symbol} className="text-xs">
-                          {it.symbol}: {it.ts ? new Date(it.ts).toLocaleTimeString() : "-"}
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            {historicalMode && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={isConnected ? async () => {
-                  setIsReloadingFallback(true);
-                  try {
-                    await fetchHistorical();
-                  } finally {
-                    setIsReloadingFallback(false);
-                  }
-                } : handleRefresh}
-                disabled={isReloadingFallback}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isReloadingFallback ? "animate-spin" : ""}`} />
-                Reload
-              </Button>
-            )}
-            {/* <Button
-              variant="outline"
-              size="sm"
-              onClick={handleRefresh}
-              disabled={!isConnected || !isMarketOpen || isRefreshing}
-            >
-              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
-              Refresh Live
-            </Button> */}
-            {error && (
-              <span className="text-xs text-red-600 truncate max-w-[320px]">
-                {error}
-              </span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      
+      <CoveredCallsBanner
+        underlyingSymbol={underlyingSymbol}
+        underlyingPrice={underlyingPrice}
+      />
 
       {/* <div className="gap-2 grid grid-cols-2 w-full">
         <CronStatusCard jobName="loginJob" displayName="Daily Ticks NSE Options Job" />
         <CronStatusCard jobName="hourlyTicksNseOptJob" displayName="Hourly Ticks NSE Options Job" />
       </div> */}
 
-      <Card>
-        <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <CardTitle>Live Market Data</CardTitle>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Expiry</span>
-            <Select
-              value={selectedExpiry ?? ""}
-              onValueChange={(value) => setSelectedExpiry(value)}
-              disabled={!expiryDates || expiryDates.length === 0}
-            >
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Select expiry" />
-              </SelectTrigger>
-              <SelectContent>
-                {expiryDates?.map((date) => (
-                  <SelectItem key={date} value={date}>
-                    {formatDateOnly(date)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {orderedGroups.length === 0 ? (
-            <div className="text-sm text-muted-foreground">No strikes available.</div>
-          ) : (
-            <div className="overflow-auto max-h-[70vh]">
-              <TooltipProvider>
-                <Table>
-                  <TableHeader className="sticky top-0 z-20 bg-background">
-                    <TableRow>
-                      <TableHead className="text-center border-b" colSpan={8}>CALLS</TableHead>
-                      <TableHead className="text-center border-b" colSpan={1}></TableHead>
-                      <TableHead className="text-center border-b" colSpan={8}>PUTS</TableHead>
-                    </TableRow>
-                    <TableRow>
-                      <SortableTableHeader
-                        sortKey="ce_date"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        Date
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="ce_oi"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        OI
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="ce_volume"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        Volume
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="ce_ltp"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        LTP
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="ce_bidQty"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        BidQTY
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="ce_bid"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        BID
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="ce_ask"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        ASK
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="ce_askQty"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        ASKQTY
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="strike"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        Strike
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="pe_askQty"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        AskQty
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="pe_ask"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        ASK
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="pe_bid"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        BID
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="pe_bidQty"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        BidQty
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="pe_ltp"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        LTP
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="pe_volume"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        Volume
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="pe_oi"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        OI
-                      </SortableTableHeader>
-                      <SortableTableHeader
-                        sortKey="pe_date"
-                        sortConfig={sortConfig}
-                        onSort={handleSortColumn}
-                        align="center"
-                      >
-                        Date
-                      </SortableTableHeader>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                  {orderedGroups.map((group) => {
-                    const ce = snapshots[group.strike]?.ce;
-                    const pe = snapshots[group.strike]?.pe;
-                    const ceUpdated = group.ce?.symbol ? !!highlighted[group.ce.symbol] : false;
-                    const peUpdated = group.pe?.symbol ? !!highlighted[group.pe.symbol] : false;
-                    const shadeCE = underlyingPrice !== undefined && group.strike <= underlyingPrice;
-                    const shadePE = underlyingPrice !== undefined && group.strike >= underlyingPrice;
-                    // const latestTs = [ce?.timestamp, pe?.timestamp].filter(Boolean).sort().slice(-1)[0] as string | undefined;
-                    // const latestDateBadge = formatDateOnly(latestTs);
-                    return (
-                      <TableRow key={group.strike}>
-                        {/* CE side */}
-                        <TableCell className={`text-center ${ceUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadeCE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatDateOnly(ce?.timestamp)}</TableCell>
-                        <TableCell className={`text-center ${ceUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadeCE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(ce?.oi, 0)}</TableCell>
-                        <TableCell className={`text-center ${ceUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadeCE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(ce?.volume, 0)}</TableCell>
-                        <TableCell className={`text-center ${ceUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadeCE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(ce?.ltp)}</TableCell>
-                        <TableCell className={`text-center ${ceUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadeCE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(ce?.bidQty, 0)}</TableCell>
-                        <TableCell className={`text-center ${ceUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadeCE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(ce?.bid)}</TableCell>
-                        <TableCell className={`text-center ${ceUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadeCE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(ce?.ask)}</TableCell>
-                        <TableCell className={`text-center ${ceUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadeCE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(ce?.askQty, 0)}</TableCell>
-                          {/* Strike */}
-                          <TableCell className="text-center font-semibold  bg-background z-10">
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <div className="px-4 inline-block">
-                                  <div>{formatNumber(group.strike, 2)}</div>
-                                  <div className="mt-1">
-                                    {/* <span className="inline-flex items-center rounded bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
-                                      {latestDateBadge}
-                                    </span> */}
-                                  </div>
-                                </div>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <div className="space-y-1">
-                                  {/* <div className="font-medium">CE</div> */}
-                                  <div className="text-xs">
-                                    Symbol: {ce?.symbol || "-"}
-                                  </div>
-                                  {/* <div className="text-xs">Date: {formatDateOnly(ce?.timestamp)}</div> */}
-                                  {/* <div className="mt-2 font-medium">PE</div> */}
-                                  <div className="text-xs">
-                                    Symbol: {pe?.symbol || "-"}
-                                  </div>
-                                  {/* <div className="text-xs">Date: {formatDateOnly(pe?.timestamp)}</div> */}
-                                </div>
-                              </TooltipContent>
-                            </Tooltip>
-                          </TableCell>
-                          {/* PE side (mirrored) */}
-                        <TableCell className={`text-center ${peUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadePE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(pe?.askQty, 0)}</TableCell>
-                        <TableCell className={`text-center ${peUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadePE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(pe?.ask)}</TableCell>
-                        <TableCell className={`text-center ${peUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadePE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(pe?.bid)}</TableCell>
-                        <TableCell className={`text-center ${peUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadePE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(pe?.bidQty, 0)}</TableCell>
-                        <TableCell className={`text-center ${peUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadePE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(pe?.ltp)}</TableCell>
-                        <TableCell className={`text-center ${peUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadePE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(pe?.volume, 0)}</TableCell>
-                        <TableCell className={`text-center ${peUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadePE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatNumber(pe?.oi, 0)}</TableCell>
-                        <TableCell className={`text-center ${peUpdated ? "bg-amber-50 dark:bg-amber-950/20 transition-colors" : ""} ${shadePE ? "bg-gray-100 dark:bg-gray-900/30" : ""}`}>{formatDateOnly(pe?.timestamp)}</TableCell>
-                        </TableRow>
-                      );
-                  })}
-                  {/* Totals row */}
-                  <TableRow>
-                    {/* CE side totals: OI, Volume, others as '-' */}
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center font-semibold">{formatNumber(totals.ceOi, 0)}</TableCell>
-                    <TableCell className="text-center font-semibold">{formatNumber(totals.ceVolume, 0)}</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    {/* Strike label */}
-                    <TableCell className="text-center font-semibold">Total</TableCell>
-                    {/* PE side totals: ..., Volume, OI */}
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                    <TableCell className="text-center font-semibold">{formatNumber(totals.peVolume, 0)}</TableCell>
-                    <TableCell className="text-center font-semibold">{formatNumber(totals.peOi, 0)}</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              </TooltipProvider>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <CoveredCallsLiveTable
+        historicalMode={historicalMode}
+        historicalLastDate={historicalLastDate}
+        isMarketOpen={isMarketOpen}
+        lastSeen={lastSeen}
+        error={error}
+        isConnected={isConnected}
+        isReloadingFallback={isReloadingFallback}
+        onReload={handleReload}
+        selectedExpiry={selectedExpiry}
+        setSelectedExpiry={setSelectedExpiry}
+        expiryDates={expiryDates || []}
+        orderedGroups={orderedGroups}
+        snapshots={snapshots}
+        highlighted={highlighted}
+        underlyingPrice={underlyingPrice}
+        totals={totals}
+        sortConfig={sortConfig}
+        handleSortColumn={handleSortColumn}
+      />
 
       {/* Trend Analysis Section */}
       <Card>
@@ -1501,527 +1050,43 @@ export default function CoveredCallsDetailsPage() {
           <CardTitle>Options Trend Analysis</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Filters */}
-          <Card>
-            <CardContent className="mt-6">
-              <div className="flex items-center justify-between mb-4">
-                {/* Trend Type */}
-                <div className="space-y-2">
-                  <div className="flex items-center space-x-2">
-                    <Label htmlFor="trend-type" className="text-sm">
-                      Daily
-                    </Label>
-                    <Switch
-                      id="trend-type"
-                      checked={trendType === "hourly"}
-                      onCheckedChange={(checked) => {
-                        setTrendType(checked ? "hourly" : "daily");
-                      }}
-                    />
-                    <Label htmlFor="trend-type" className="text-sm">
-                      Hourly
-                    </Label>
-                  </div>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetTrendFilters}
-                >
-                  Reset Filters
-                </Button>
-              </div>
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                
-                {/* Option Type */}
-                <div className="space-y-6">
-                  <Label className="text-sm font-medium">Option Type</Label>
-                  <RadioGroup
-                    className="flex space-x-2"
-                    value={trendOptionType}
-                    onValueChange={(value: "ALL" | "CE" | "PE") => {
-                      setTrendOptionType(value);
-                    }}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="ALL" id="trend-all" />
-                      <Label htmlFor="trend-all" className="text-sm font-normal">
-                        All
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="CE" id="trend-ce" />
-                      <Label htmlFor="trend-ce" className="text-sm font-normal">
-                        Call (CE)
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="PE" id="trend-pe" />
-                      <Label htmlFor="trend-pe" className="text-sm font-normal">
-                        Put (PE)
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
+          <CoveredCallsTrendFilters
+            trendType={trendType}
+            setTrendType={setTrendType}
+            trendOptionType={trendOptionType}
+            setTrendOptionType={setTrendOptionType}
+            trendOtmMin={trendOtmMin}
+            setTrendOtmMin={setTrendOtmMin}
+            trendOtmMax={trendOtmMax}
+            setTrendOtmMax={setTrendOtmMax}
+            trendPremiumMin={trendPremiumMin}
+            setTrendPremiumMin={setTrendPremiumMin}
+            trendPremiumMax={trendPremiumMax}
+            setTrendPremiumMax={setTrendPremiumMax}
+            trendStartDate={trendStartDate}
+            setTrendStartDate={setTrendStartDate}
+            trendEndDate={trendEndDate}
+            setTrendEndDate={setTrendEndDate}
+            trendLoading={trendLoading}
+            onApplyTrendFilters={handleApplyTrendFilters}
+            onResetTrendFilters={handleResetTrendFilters}
+          />
 
-                {/* OTM % Range */}
-                <div className="space-y-8">
-                  <Label className="text-sm font-medium">OTM Range (%)</Label>
-                  <div className="space-y-4">
-                    <div className="relative w-full px-3">
-                      <div className="relative">
-                        <Slider
-                          value={[trendOtmMin, trendOtmMax]}
-                          onValueChange={(value) => {
-                            setTrendOtmMin(value[0]);
-                            setTrendOtmMax(value[1]);
-                          }}
-                          min={-100}
-                          max={100}
-                          step={1}
-                          className="w-full
-                            [&_[role=slider]]:h-5
-                            [&_[role=slider]]:w-5
-                            [&_[role=slider]]:border-2
-                            [&_[role=slider]]:border-primary
-                            [&_[role=slider]]:bg-background
-                            [&_[role=slider]]:shadow-lg
-                            [&>.relative]:h-2
-                            [&_.bg-primary]:bg-primary"
-                        />
-
-                        {[
-                          { val: trendOtmMin, key: "min" },
-                          { val: trendOtmMax, key: "max" },
-                        ].map((item, idx) => (
-                          <div
-                            key={item.key}
-                            className="absolute -top-8 transform -translate-x-1/2"
-                            style={{
-                              left: `${((item.val + 100) / 200) * 100}%`,
-                            }}
-                          >
-                            <Input
-                              type="text"
-                              pattern="^-?\\d+$"
-                              title="Enter digits"
-                              value={item.val}
-                              onChange={(e) => {
-                                const value = parseInt(e.target.value) || 0;
-                                if (idx === 0) {
-                                  setTrendOtmMin(
-                                    Math.max(-100, Math.min(value, trendOtmMax))
-                                  );
-                                } else {
-                                  setTrendOtmMax(
-                                    Math.min(100, Math.max(value, trendOtmMin))
-                                  );
-                                }
-                              }}
-                              className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                        <span>-100</span>
-                        <span>0</span>
-                        <span>+100</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Premium % Range */}
-                <div className="space-y-8">
-                  <Label className="text-sm font-medium">Premium % Range</Label>
-                  <div className="space-y-4">
-                    <div className="relative w-full px-3">
-                      <div className="relative">
-                        <Slider
-                          value={[trendPremiumMin, trendPremiumMax]}
-                          onValueChange={(value) => {
-                            setTrendPremiumMin(value[0]);
-                            setTrendPremiumMax(value[1]);
-                          }}
-                          min={0}
-                          max={50}
-                          step={1}
-                          className="w-full
-                            [&_[role=slider]]:h-5
-                            [&_[role=slider]]:w-5
-                            [&_[role=slider]]:border-2
-                            [&_[role=slider]]:border-primary
-                            [&_[role=slider]]:bg-background
-                            [&_[role=slider]]:shadow-lg
-                            [&>.relative]:h-2
-                            [&_.bg-primary]:bg-primary"
-                        />
-
-                        {[
-                          { val: trendPremiumMin, key: "min" },
-                          { val: trendPremiumMax, key: "max" },
-                        ].map((item, idx) => (
-                          <div
-                            key={item.key}
-                            className="absolute -top-8 transform -translate-x-1/2"
-                            style={{
-                              left: `${(item.val / 100) * 200}%`,
-                            }}
-                          >
-                            <Input
-                              type="text"
-                              pattern="^\\d+$"
-                              title="Enter digits"
-                              value={item.val}
-                              onChange={(e) => {
-                                const value = parseInt(e.target.value) || 0;
-                                if (idx === 0) {
-                                  setTrendPremiumMin(
-                                    Math.max(0, Math.min(value, trendPremiumMax))
-                                  );
-                                } else {
-                                  setTrendPremiumMax(
-                                    Math.min(25, Math.max(value, trendPremiumMin))
-                                  );
-                                }
-                              }}
-                              className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                        <span>0</span>
-                        <span>50</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Date Range */}
-                <div className="space-y-4">
-                  <Label className="text-sm font-medium">Date Range</Label>
-                  <div className="grid gap-2 grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center">
-                    <div className="flex-1 flex flex-col">
-                      <span className="text-[10px] text-muted-foreground sm:hidden mb-1">
-                        From
-                      </span>
-                      <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
-                        <Input
-                          type="text"
-                          placeholder="YYYY-MM-DD"
-                          value={trendStartDate}
-                          onChange={(e) => setTrendStartDate(e.target.value)}
-                          className="h-9 text-sm sm:text-xs w-full"
-                          autoComplete="off"
-                          inputMode="numeric"
-                        />
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-9 w-9"
-                            >
-                              <CalendarIcon className="h-4 w-4" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" className="p-0">
-                            <Calendar
-                              mode="single"
-                              selected={strToDate(trendStartDate)}
-                              onSelect={(d) =>
-                                setTrendStartDate(
-                                  d ? d.toISOString().split("T")[0] : ""
-                                )
-                              }
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-                    <div className="text-center text-xs text-muted-foreground py-1">
-                      to
-                    </div>
-                    <div className="flex-1 flex flex-col">
-                      <span className="text-[10px] text-muted-foreground sm:hidden mb-1">
-                        To
-                      </span>
-                      <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
-                        <Input
-                          type="text"
-                          placeholder="YYYY-MM-DD"
-                          value={trendEndDate}
-                          onChange={(e) => setTrendEndDate(e.target.value)}
-                          className="h-9 text-sm sm:text-xs w-full"
-                          autoComplete="off"
-                          inputMode="numeric"
-                        />
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              className="h-9 w-9"
-                            >
-                              <CalendarIcon className="h-4 w-4" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" className="p-0">
-                            <Calendar
-                              mode="single"
-                              selected={strToDate(trendEndDate)}
-                              onSelect={(d) =>
-                                setTrendEndDate(
-                                  d ? d.toISOString().split("T")[0] : ""
-                                )
-                              }
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 flex justify-end">
-                <Button
-                  onClick={handleApplyTrendFilters}
-                  disabled={trendLoading}
-                  variant="default"
-                  size="sm"
-                >
-                  Apply Filters
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Trend Data Table */}
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableTableHeader
-                    sortKey="underlying"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Underlying
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="time"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Time
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="underlying_price"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Underlying Price
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="strike"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Strike
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="expiry_month"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Expiry Month
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="option_type"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Option Type
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="premium"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Premium
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="volume"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Volume
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="otm"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    OTM (%)
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="premium_percentage"
-                    sortConfig={trendSortConfig as any}
-                    onSort={handleTrendSortColumn as any}
-                    align="center"
-                  >
-                    Premium %
-                  </SortableTableHeader>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {trendLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : trendError ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={10}
-                      className="text-center text-red-600"
-                    >
-                      Error: {trendError}
-                    </TableCell>
-                  </TableRow>
-                ) : sortedTrendData.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center">
-                      No trend data available.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  sortedTrendData.map((row, idx) => (
-                    <TableRow
-                      key={`${row.underlying}-${row.time}-${idx}`}
-                      className={getTrendRowColor(row.time)}
-                    >
-                      <TableCell className="text-center">
-                        {row.underlying}
-                      </TableCell>
-                      <TableCell className="text-center">{row.time}</TableCell>
-                      <TableCell className="text-center">
-                        {formatNumber(row.underlying_price)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {formatNumber(row.strike, 2)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {row.expiry_month}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge
-                          variant={row.option_type === "CE" ? "default" : "secondary"}
-                        >
-                          {row.option_type}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {formatNumber(row.premium)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {formatNumber(row.volume, 0)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {formatNumber(row.otm)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {formatNumber(row.premium_percentage)}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Trend Pagination */}
-          {trendPagination && trendPagination.totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground">
-                Showing {(trendPage - 1) * trendPagination.limit + 1} to{" "}
-                {Math.min(trendPage * trendPagination.limit, trendPagination.total)} of{" "}
-                {trendPagination.total} rows
-              </p>
-
-              <div className="flex items-center gap-2">
-                {/* Previous Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTrendPreviousPage}
-                  disabled={trendPage === 1 || trendLoading}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </Button>
-
-                {/* Page Numbers */}
-                <div className="flex items-center gap-1">
-                  {getTrendPageNumbers().map((pageNum, idx) =>
-                    pageNum === "..." ? (
-                      <span
-                        key={`ellipsis-${idx}`}
-                        className="px-2 text-muted-foreground"
-                      >
-                        ...
-                      </span>
-                    ) : (
-                      <Button
-                        key={pageNum}
-                        variant={
-                          trendPage === pageNum ? "default" : "outline"
-                        }
-                        size="sm"
-                        onClick={() => handleTrendPageClick(pageNum as number)}
-                        disabled={trendLoading}
-                        className="min-w-[40px]"
-                      >
-                        {pageNum}
-                      </Button>
-                    )
-                  )}
-                </div>
-
-                {/* Next Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleTrendNextPage}
-                  disabled={!trendPagination.hasMore || trendLoading}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Pagination Info (when only 1 page) */}
-          {trendPagination && trendPagination.totalPages === 1 && (
-            <div className="flex items-center justify-center">
-              <p className="text-sm text-muted-foreground">
-                Showing all {trendPagination.total} rows
-              </p>
-            </div>
-          )}
+          <CoveredCallsTrendTable
+            trendLoading={trendLoading}
+            trendError={trendError}
+            sortedTrendData={sortedTrendData || []}
+            trendType={trendType}
+            trendSortConfig={trendSortConfig}
+            handleTrendSortColumn={handleTrendSortColumn}
+            getTrendRowColor={getTrendRowColor}
+            trendPagination={trendPagination}
+            trendPage={trendPage}
+            handleTrendPreviousPage={handleTrendPreviousPage}
+            handleTrendNextPage={handleTrendNextPage}
+            handleTrendPageClick={handleTrendPageClick}
+            getTrendPageNumbers={getTrendPageNumbers}
+          />
         </CardContent>
       </Card>
     </div>

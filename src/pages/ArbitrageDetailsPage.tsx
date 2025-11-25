@@ -5,38 +5,19 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router-dom";
-import {
-  ArrowLeft,
-  TrendingUp,
-  TrendingDown,
-  ChevronLeft,
-  ChevronRight,
-  Calendar as CalendarIcon,
-} from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { apiClient } from "@/config/axiosClient";
 import { config } from "@/config/api";
-import { Slider } from "@/components/ui/slider";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { SortableTableHeader } from "@/components/modal/SortableTableHeader";
 import { useArbitrageDetails } from "@/hooks/useArbitrageDetails";
 import { MultiSymbolLiveData } from "@/components/MultiSymbolLiveData";
+import { ArbitrageHeader } from "@/components/arbitrage-details/ArbitrageHeader";
+import { ArbitrageDateRangeSummary } from "@/components/arbitrage-details/ArbitrageDateRangeSummary";
+import { SelectedArbitrageTable } from "@/components/arbitrage-details/SelectedArbitrageTable";
+import { ArbitrageFilters } from "@/components/arbitrage-details/ArbitrageFilters";
+import { ArbitrageSummaryCards } from "@/components/arbitrage-details/ArbitrageSummaryCards";
+import { ArbitrageHistoryTable } from "@/components/arbitrage-details/ArbitrageHistoryTable";
 
 type FiltersState = {
   gapFilter: "both" | "positive" | "negative";
@@ -78,8 +59,6 @@ interface TableSortConfig {
   key: SortKey;
   direction: SortDirection;
 }
-
-// LiveDataRow interface is no longer needed - data is handled by MultiSymbolLiveData
 
 export default function ArbitrageDetailsPage() {
   const { instrumentId } = useParams<{ instrumentId: string; date: string }>();
@@ -148,8 +127,28 @@ export default function ArbitrageDetailsPage() {
     minDate: null,
     maxDate: null,
   });
-  const [equityRange, setEquityRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null }>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
-  const [futuresRange, setFuturesRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null}>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
+  const [equityRange, setEquityRange] = useState<{
+    min_date: string | null;
+    max_date: string | null;
+    hourly_min_date: string | null;
+    hourly_max_date: string | null;
+  }>({
+    min_date: null,
+    max_date: null,
+    hourly_min_date: null,
+    hourly_max_date: null,
+  });
+  const [futuresRange, setFuturesRange] = useState<{
+    min_date: string | null;
+    max_date: string | null;
+    hourly_min_date: string | null;
+    hourly_max_date: string | null;
+  }>({
+    min_date: null,
+    max_date: null,
+    hourly_min_date: null,
+    hourly_max_date: null,
+  });
 
   // Applied filters (used for API calls)
   const [appliedFilters, setAppliedFilters] = useState<FiltersState>({
@@ -201,7 +200,7 @@ export default function ArbitrageDetailsPage() {
 
       setIsMarketOpen(
         currentTimeInMinutes >= marketOpenTime &&
-          currentTimeInMinutes < marketCloseTime
+        currentTimeInMinutes < marketCloseTime
       );
     }, 60000); // Check every minute
 
@@ -378,11 +377,25 @@ export default function ArbitrageDetailsPage() {
         const symbol = state?.name || null;
         const instId = state?.instrumentid || null;
         const [eq, fut] = await Promise.all([
-          apiClient.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, { params: { symbol: symbol ?? 'null' } }),
-          apiClient.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, { params: { instrumentId: instId ?? 'null' } }),
+          apiClient.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, {
+            params: { symbol: symbol ?? "null" },
+          }),
+          apiClient.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, {
+            params: { instrumentId: instId ?? "null" },
+          }),
         ]);
-        setEquityRange({ min_date: eq.data?.min_date ?? null, max_date: eq.data?.max_date ?? null, hourly_min_date: eq.data?.hourly_min_date ?? null, hourly_max_date: eq.data?.hourly_max_date ?? null });
-        setFuturesRange({ min_date: fut.data?.min_date ?? null, max_date: fut.data?.max_date ?? null, hourly_min_date: fut.data?.hourly_min_date ?? null, hourly_max_date: fut.data?.hourly_max_date ?? null });
+        setEquityRange({
+          min_date: eq.data?.min_date ?? null,
+          max_date: eq.data?.max_date ?? null,
+          hourly_min_date: eq.data?.hourly_min_date ?? null,
+          hourly_max_date: eq.data?.hourly_max_date ?? null,
+        });
+        setFuturesRange({
+          min_date: fut.data?.min_date ?? null,
+          max_date: fut.data?.max_date ?? null,
+          hourly_min_date: fut.data?.hourly_min_date ?? null,
+          hourly_max_date: fut.data?.hourly_max_date ?? null,
+        });
       } catch (e) {
         // ignore
       }
@@ -394,8 +407,22 @@ export default function ArbitrageDetailsPage() {
   useEffect(() => {
     if (futuresRange.min_date || futuresRange.max_date) {
       setDateRangeBounds({
-        minDate: timeRange === "hour" ? futuresRange.hourly_min_date ? new Date(futuresRange.hourly_min_date) : null : futuresRange.min_date ? new Date(futuresRange.min_date) : null,
-        maxDate: timeRange === "hour" ? futuresRange.hourly_max_date ? new Date(futuresRange.hourly_max_date) : null : futuresRange.max_date ? new Date(futuresRange.max_date) : null,
+        minDate:
+          timeRange === "hour"
+            ? futuresRange.hourly_min_date
+              ? new Date(futuresRange.hourly_min_date)
+              : null
+            : futuresRange.min_date
+              ? new Date(futuresRange.min_date)
+              : null,
+        maxDate:
+          timeRange === "hour"
+            ? futuresRange.hourly_max_date
+              ? new Date(futuresRange.hourly_max_date)
+              : null
+            : futuresRange.max_date
+              ? new Date(futuresRange.max_date)
+              : null,
       });
     }
   }, [futuresRange.min_date, futuresRange.max_date, timeRange]);
@@ -509,34 +536,6 @@ export default function ArbitrageDetailsPage() {
     return symbolColorMap.get(key) || "";
   };
 
-  // Format number helper
-  const formatNumber = (num: number, decimals = 2) => {
-    return num !== null ? Number(num).toFixed(decimals) : "-";
-  };
-
-  const strToDate = (s?: string): Date | undefined => {
-    if (!s) return undefined;
-    const d = new Date(s);
-    return isNaN(d.getTime()) ? undefined : d;
-  };
-
-  const getTimeMatchFlags = (row: any) => {
-    const t1 = row.time_1 as string | null | undefined;
-    const t2 = row.time_2 as string | null | undefined;
-    const t3 = row.time_3 as string | null | undefined;
-
-    const isValid = (t?: string | null) => !!t && t.trim().length > 0;
-
-    const match1 =
-      isValid(t1) && ((isValid(t2) && t1 === t2) || (isValid(t3) && t1 === t3));
-    const match2 =
-      isValid(t2) && ((isValid(t1) && t2 === t1) || (isValid(t3) && t2 === t3));
-    const match3 =
-      isValid(t3) && ((isValid(t1) && t3 === t1) || (isValid(t2) && t3 === t2));
-
-    return { match1, match2, match3 };
-  };
-
   const handleApplyFilters = () => {
     setAppliedFilters({
       gapFilter,
@@ -582,181 +581,16 @@ export default function ArbitrageDetailsPage() {
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/arbitrage")}
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-3xl font-bold tracking-tight">{state.name}</h1>
-            <Badge variant="outline">
-              {new Date(state.date).toLocaleDateString()}
-            </Badge>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Instrument ID: {state.instrumentid}
-          </p>
-        </div>
-      </div>
+      <ArbitrageHeader name={state.name} date={state.date} />
 
-      <Separator />
-
-      {/* Daily Data range summary */}
-      <div className='grid gap-6 md:grid-cols-2'>
-        <Card>
-          <CardHeader className='grid grid-cols-3 text-center'>
-            <CardTitle className='text-base'>Equity Date Range (Daily)</CardTitle>
-            <CardTitle>From: <span className='font-medium text-foreground'>{equityRange.min_date ? new Date(equityRange.min_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium text-foreground'>{equityRange.max_date ? new Date(equityRange.max_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className='grid grid-cols-3 text-center'>
-            <CardTitle className='text-base'>Futures Date Range (Daily)</CardTitle>
-            <CardTitle>From: <span className='font-medium'>{futuresRange.min_date ? new Date(futuresRange.min_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium'>{futuresRange.max_date ? new Date(futuresRange.max_date).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          }) : '-'}</span></CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-
-      {/* Hourly Data range summary */}
-      <div className='grid gap-6 md:grid-cols-2'>
-        <Card>
-          <CardHeader className='grid grid-cols-3 text-center'>
-            <CardTitle className='text-base'>Equity Date Range (Hourly)</CardTitle>
-            <CardTitle>From: <span className='font-medium'>{equityRange.hourly_min_date ? new Date(equityRange.hourly_min_date).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium'>{equityRange.hourly_max_date ? new Date(equityRange.hourly_max_date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className='grid grid-cols-3 text-center'>
-            <CardTitle className='text-base'>Futures Date Range (Hourly)</CardTitle>
-            <CardTitle>From: <span className='font-medium text-foreground'>{futuresRange.hourly_min_date ? new Date(futuresRange.hourly_min_date).toLocaleDateString("en-IN", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium text-foreground'>{futuresRange.hourly_max_date ? new Date(futuresRange.hourly_max_date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                            hour:"2-digit",
-                            minute:"2-digit"
-                          }) : '-'}</span></CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
+      {/* Date Range Summary */}
+      <ArbitrageDateRangeSummary
+        equityRange={equityRange}
+        futuresRange={futuresRange}
+      />
 
       {/* Section 1: Selected Row Data */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Selected Arbitrage Data</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-center">Name</TableHead>
-                  <TableHead className="text-center">Date</TableHead>
-                  <TableHead className="text-center">
-                    Near Future Symbol
-                  </TableHead>
-                  <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">
-                    Next Future Symbol
-                  </TableHead>
-                  <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">
-                    Far Future Symbol
-                  </TableHead>
-                  <TableHead className="text-center">Price</TableHead>
-                  <TableHead className="text-center">Gap (Near & Next)</TableHead>
-                  <TableHead className="text-center">Gap (Next & Far)</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                <TableRow>
-                  <TableCell className="text-center">{state.name}</TableCell>
-                  <TableCell className="text-center">{state.date}</TableCell>
-                  <TableCell className="text-center">
-                    {state.symbol_1}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {formatNumber(state.price_1)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {state.symbol_2}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {formatNumber(state.price_2)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {state.symbol_3}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    {formatNumber(state.price_3)}
-                  </TableCell>
-                  <TableCell
-                    className={
-                      state.gap_1 > 0
-                        ? "text-green-600 text-center"
-                        : "text-red-600 text-center"
-                    }
-                  >
-                    {formatNumber(state.gap_1)}
-                  </TableCell>
-                  <TableCell
-                    className={
-                      state.gap_2 > 0
-                        ? "text-green-600 text-center"
-                        : "text-red-600 text-center"
-                    }
-                  >
-                    {formatNumber(state.gap_2)}
-                  </TableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+      <SelectedArbitrageTable data={state} />
 
       {/* Section 2: Enhanced Multi-Symbol Live Data */}
       <MultiSymbolLiveData symbols={symbols} isMarketOpen={isMarketOpen} />
@@ -768,579 +602,43 @@ export default function ArbitrageDetailsPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Filters */}
-          <Card>
-            <CardContent className="mt-6">
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                {/* Time Range Toggle */}
-                <div className="space-y-8">
-                  <Label className="text-sm font-medium">Data Trend</Label>
-                  <div className="flex items-center space-x-2">
-                    <Label htmlFor="time-range" className="text-sm">
-                      Day-wise
-                    </Label>
-                    <Switch
-                      id="time-range"
-                      checked={timeRange === "hour"}
-                      onCheckedChange={(checked) =>
-                        setTimeRange(checked ? "hour" : "day")
-                      }
-                    />
-                    <Label htmlFor="time-range" className="text-sm">
-                      Hour-wise
-                    </Label>
-                  </div>
-                </div>
-
-                {/* Gap Type Filter */}
-                <div className="space-y-8">
-                  <Label className="text-sm font-medium">Gap Type</Label>
-                  <RadioGroup
-                    className="flex space-x-2"
-                    value={gapFilter}
-                    onValueChange={(value: any) => setGapFilter(value)}
-                  >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="both" id="both" />
-                      <Label htmlFor="both" className="text-sm font-normal">
-                        All
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="positive" id="positive" />
-                      <Label htmlFor="positive" className="text-sm font-normal">
-                        Positive Only
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="negative" id="negative" />
-                      <Label htmlFor="negative" className="text-sm font-normal">
-                        Negative Only
-                      </Label>
-                    </div>
-                  </RadioGroup>
-                </div>
-
-                {/* Gap Range Filter */}
-                <div className="space-y-8">
-                  <Label className="text-sm font-medium">Gap Range</Label>
-                  <div className="space-y-4">
-                    <div className="relative w-full px-3">
-                      {/* Slider */}
-                      <div className="relative">
-                        <Slider
-                          value={gapRange}
-                          onValueChange={(value) =>
-                            setGapRange(value as [number, number])
-                          }
-                          min={-100}
-                          max={100}
-                          step={1}
-                          className="w-full 
-            [&_[role=slider]]:h-5 
-            [&_[role=slider]]:w-5 
-            [&_[role=slider]]:border-2 
-            [&_[role=slider]]:border-primary 
-            [&_[role=slider]]:bg-background 
-            [&_[role=slider]]:shadow-lg 
-            [&>.relative]:h-2 
-            [&_.bg-primary]:bg-primary"
-                        />
-
-                        {/* Editable value inputs */}
-                        {gapRange.map((val, idx) => (
-                          <div
-                            key={idx}
-                            className="absolute -top-8 transform -translate-x-1/2"
-                            style={{
-                              left: `${((val + 100) / 200) * 100}%`, // converts value (-100–100) to %
-                            }}
-                          >
-                            <Input
-                              type="text"
-                              pattern="^-?\d+$"
-                              title="Enter digits"
-                              value={val}
-                              onChange={(e) => {
-                                const value = parseInt(e.target.value) || 0;
-                                const newRange: [number, number] = [
-                                  ...gapRange,
-                                ] as [number, number];
-                                if (idx === 0) {
-                                  // Min value
-                                  newRange[0] = Math.max(
-                                    -100,
-                                    Math.min(value, gapRange[1])
-                                  );
-                                } else {
-                                  // Max value
-                                  newRange[1] = Math.min(
-                                    100,
-                                    Math.max(value, gapRange[0])
-                                  );
-                                }
-                                setGapRange(newRange);
-                              }}
-                              min={idx === 0 ? -100 : gapRange[0]}
-                              max={idx === 0 ? gapRange[1] : 100}
-                              className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
-                            />
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Scale labels */}
-                      <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                        <span>-100</span>
-                        <span>0</span>
-                        <span>+100</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Date Range Filter */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Date Range</Label>
-                  <div className="grid gap-2 grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center">
-                    <div className="flex-1 flex flex-col">
-                      <span className="text-[10px] text-muted-foreground sm:hidden mb-1">From</span>
-                      <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
-                        <Input
-                          type="text"
-                          placeholder="YYYY-MM-DD"
-                          value={selectedStartDate}
-                          onChange={(e) => setSelectedStartDate(e.target.value)}
-                          className="h-9 text-sm sm:text-xs w-full"
-                          autoComplete="off"
-                          inputMode="numeric"
-                        />
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" size="icon" className="h-9 w-9">
-                              <CalendarIcon className="h-4 w-4" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" className="p-0">
-                            <Calendar
-                              mode="single"
-                              selected={strToDate(selectedStartDate)}
-                              onSelect={(d) =>
-                                setSelectedStartDate(d ? d.toISOString().split("T")[0] : "")
-                              }
-                              fromDate={dateRangeBounds.minDate || undefined}
-                              toDate={
-                                selectedEndDate
-                                  ? strToDate(selectedEndDate)
-                                  : dateRangeBounds.maxDate || undefined
-                              }
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-                    <div className="text-center text-xs text-muted-foreground py-1">to</div>
-                    <div className="flex-1 flex flex-col">
-                      <span className="text-[10px] text-muted-foreground sm:hidden mb-1">To</span>
-                      <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
-                        <Input
-                          type="text"
-                          placeholder="YYYY-MM-DD"
-                          value={selectedEndDate}
-                          onChange={(e) => setSelectedEndDate(e.target.value)}
-                          className="h-9 text-sm sm:text-xs w-full"
-                          autoComplete="off"
-                          inputMode="numeric"
-                        />
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" size="icon" className="h-9 w-9">
-                              <CalendarIcon className="h-4 w-4" />
-                            </Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="start" className="p-0">
-                            <Calendar
-                              mode="single"
-                              selected={strToDate(selectedEndDate)}
-                              onSelect={(d) =>
-                                setSelectedEndDate(d ? d.toISOString().split("T")[0] : "")
-                              }
-                              fromDate={
-                                selectedStartDate
-                                  ? strToDate(selectedStartDate)
-                                  : dateRangeBounds.minDate || undefined
-                              }
-                              toDate={dateRangeBounds.maxDate || undefined}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-                  </div>
-                  {dateRangeBounds.minDate && dateRangeBounds.maxDate && (
-                      <div className="flex flex-col sm:flex-row gap-1 text-xs text-muted-foreground px-1 sm:px-3">
-                        <span>
-                          Available: {dateRangeBounds.minDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        </span>
-                        <span>
-                          to {dateRangeBounds.maxDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                        </span>
-                      </div>
-                  )}
-                </div>
-                </div>
-              <div className="mt-4 flex justify-end gap-4">
-                <Button
-                  onClick={handleApplyFilters}
-                  disabled={!!loading}
-                  variant="default"
-                  size="sm"
-                >
-                  Apply Filters
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResetFilters}
-                >
-                  Reset Filters
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <ArbitrageFilters
+            timeRange={timeRange}
+            setTimeRange={setTimeRange}
+            gapFilter={gapFilter}
+            setGapFilter={setGapFilter}
+            gapRange={gapRange}
+            setGapRange={setGapRange}
+            selectedStartDate={selectedStartDate}
+            setSelectedStartDate={setSelectedStartDate}
+            selectedEndDate={selectedEndDate}
+            setSelectedEndDate={setSelectedEndDate}
+            dateRangeBounds={dateRangeBounds}
+            loading={loading}
+            onApplyFilters={handleApplyFilters}
+            onResetFilters={handleResetFilters}
+          />
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Positive Gaps
-                </CardTitle>
-                <TrendingUp className="h-4 w-4 text-green-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {summary?.positiveGapCount || 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Total positive gaps from both columns
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">
-                  Negative Gaps
-                </CardTitle>
-                <TrendingDown className="h-4 w-4 text-red-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">
-                  {summary?.negativeGapCount || 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Total negative gaps from both columns
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+          <ArbitrageSummaryCards summary={summary} />
 
           {/* Data Table */}
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <SortableTableHeader
-                    sortKey="date"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Date
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="symbol_1"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Near Future Symbol
-                  </SortableTableHeader>
-                  {timeRange == "hour" && (
-                    <SortableTableHeader
-                      sortKey="time_1"
-                      sortConfig={sortConfig as any}
-                      onSort={handleSortColumn as any}
-                      align="center"
-                    >
-                      Near Future Time
-                    </SortableTableHeader>
-                  )}
-                  <SortableTableHeader
-                    sortKey="price_1"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Price
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="symbol_2"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Next Future Symbol
-                  </SortableTableHeader>
-                  {timeRange == "hour" && (
-                    <SortableTableHeader
-                      sortKey="time_2"
-                      sortConfig={sortConfig as any}
-                      onSort={handleSortColumn as any}
-                      align="center"
-                    >
-                      Next Future Time
-                    </SortableTableHeader>
-                  )}
-                  <SortableTableHeader
-                    sortKey="price_2"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Price
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="symbol_3"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Far Future Symbol
-                  </SortableTableHeader>
-                  {timeRange == "hour" && (
-                    <SortableTableHeader
-                      sortKey="time_3"
-                      sortConfig={sortConfig as any}
-                      onSort={handleSortColumn as any}
-                      align="center"
-                    >
-                      Far Future Time
-                    </SortableTableHeader>
-                  )}
-                  <SortableTableHeader
-                    sortKey="price_3"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Price
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="gap_1"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Gap (Near & Next)
-                  </SortableTableHeader>
-                  <SortableTableHeader
-                    sortKey="gap_2"
-                    sortConfig={sortConfig as any}
-                    onSort={handleSortColumn as any}
-                    align="center"
-                  >
-                    Gap (Next & Far)
-                  </SortableTableHeader>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : error ? (
-                  <TableRow>
-                    <TableCell colSpan={9} className="text-center text-red-600">
-                      Error: {error}
-                    </TableCell>
-                  </TableRow>
-                ) : sortedFilteredData && sortedFilteredData.length > 0 ? (
-                  sortedFilteredData.map((row: any, idx: number) => {
-                    const { match1, match2, match3 } =
-                      timeRange === "hour" ? getTimeMatchFlags(row) : { match1: false, match2: false, match3: false };
-
-                    const symbolBaseClass =
-                      "text-center font-medium";
-                    const symbolBlueClass = "text-blue-800";
-
-                    return (
-                      <TableRow
-                        key={idx}
-                        className={getRowColor(row.date || "-")}
-                      >
-                      <TableCell className="text-center text-xs">
-                        {timeRange === "hour" ? new Date(row.date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "2-digit",
-                            hour:"numeric",
-                            minute:"2-digit",
-                            hour12: false
-                          }) : new Date(row.date).toLocaleDateString("en-IN", {
-                            timeZone: "UTC",
-                            month: "short",
-                            day: "numeric",
-                            year: "2-digit"
-                          })}
-                      </TableCell>
-                      <TableCell
-                        className={`${symbolBaseClass} ${
-                          match1 ? symbolBlueClass : ""
-                        }`}
-                      >
-                        {row.symbol_1 || "-"}
-                      </TableCell>
-                      {timeRange == "hour" && <TableCell className="text-center">
-                        {row.time_1 || "-"}
-                      </TableCell>}
-                      <TableCell className="text-center">
-                        {formatNumber(row.price_1)}
-                      </TableCell>
-                      <TableCell
-                        className={`${symbolBaseClass} ${
-                          match2 ? symbolBlueClass : ""
-                        }`}
-                      >
-                        {row.symbol_2 || "-"}
-                      </TableCell>
-                      {timeRange == "hour" && <TableCell className="text-center">
-                        {row.time_2 || "-"}
-                      </TableCell>}
-                      <TableCell className="text-center">
-                        {formatNumber(row.price_2)}
-                      </TableCell>
-                      <TableCell
-                        className={`${symbolBaseClass} ${
-                          match3 ? symbolBlueClass : ""
-                        }`}
-                      >
-                        {row.symbol_3 || "-"}
-                      </TableCell>
-                      {timeRange == "hour" && <TableCell className="text-center">
-                        {row.time_3 || "-"}
-                      </TableCell>}
-                      <TableCell className="text-center">
-                        {formatNumber(row.price_3)}
-                      </TableCell>
-                      <TableCell
-                        className={
-                          row.gap_1 > 0
-                            ? "text-green-600 text-center font-semibold"
-                            : "text-red-600 text-center font-semibold"
-                        }
-                      >
-                        {formatNumber(row.gap_1)}
-                      </TableCell>
-                      <TableCell
-                        className={
-                          row.gap_2 > 0
-                            ? "text-green-600 text-center font-semibold"
-                            : "text-red-600 text-center font-semibold"
-                        }
-                      >
-                        {formatNumber(row.gap_2)}
-                      </TableCell>
-                    </TableRow>
-                  );
-                  })
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={9}
-                      className="text-center text-muted-foreground"
-                    >
-                      No data available
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Pagination Controls */}
-          {pagination && pagination.totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground">
-                Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
-                {Math.min(currentPage * itemsPerPage, pagination.total)} of{" "}
-                {pagination.total} rows
-              </p>
-
-              <div className="flex items-center gap-2">
-                {/* Previous Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePreviousPage}
-                  disabled={currentPage === 1 || loading}
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Previous
-                </Button>
-
-                {/* Page Numbers */}
-                <div className="flex items-center gap-1">
-                  {getPageNumbers().map((pageNum, idx) =>
-                    pageNum === "..." ? (
-                      <span
-                        key={`ellipsis-${idx}`}
-                        className="px-2 text-muted-foreground"
-                      >
-                        ...
-                      </span>
-                    ) : (
-                      <Button
-                        key={pageNum}
-                        variant={
-                          currentPage === pageNum ? "default" : "outline"
-                        }
-                        size="sm"
-                        onClick={() => handlePageClick(pageNum as number)}
-                        disabled={loading}
-                        className="min-w-[40px]"
-                      >
-                        {pageNum}
-                      </Button>
-                    )
-                  )}
-                </div>
-
-                {/* Next Button */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleNextPage}
-                  disabled={!pagination.hasMore || loading}
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Pagination Info (when only 1 page) */}
-          {pagination && pagination.totalPages === 1 && (
-            <div className="flex items-center justify-center">
-              <p className="text-sm text-muted-foreground">
-                Showing all {pagination.total} rows
-              </p>
-            </div>
-          )}
+          <ArbitrageHistoryTable
+            loading={loading}
+            error={error}
+            sortedFilteredData={sortedFilteredData}
+            timeRange={timeRange}
+            sortConfig={sortConfig}
+            handleSortColumn={handleSortColumn as any}
+            getRowColor={getRowColor}
+            pagination={pagination}
+            currentPage={currentPage}
+            itemsPerPage={itemsPerPage}
+            handlePreviousPage={handlePreviousPage}
+            handleNextPage={handleNextPage}
+            handlePageClick={handlePageClick}
+            getPageNumbers={getPageNumbers}
+          />
         </CardContent>
       </Card>
     </div>

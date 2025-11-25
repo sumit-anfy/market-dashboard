@@ -1,7 +1,9 @@
 import React from 'react';
-import { BarChart3, Clock, TrendingUp, Menu, X, ArrowLeftRight, Shield } from 'lucide-react';
+import { BarChart3, Clock, TrendingUp, Menu, X, ArrowLeftRight, Shield, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
+import { NotificationCenter } from './NotificationCenter';
+import { useAuth } from '@/hooks/useAuth';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,6 +13,7 @@ interface LayoutProps {
 
 export function Layout({ children, currentView, onViewChange }: LayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const { logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
@@ -22,51 +25,65 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
               <h1 className="text-xl font-bold">Market Data Platform</h1>
             </div>
             
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center space-x-1">
-              <Button
-                variant={currentView === 'historical' ? 'default' : 'ghost'}
-                onClick={() => onViewChange('historical')}
-                className="flex items-center gap-2"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Historical Data
-              </Button>
-              <Button
-                variant={currentView === 'live' ? 'default' : 'ghost'}
-                onClick={() => onViewChange('live')}
-                className="flex items-center gap-2"
-              >
-                <Clock className="h-4 w-4" />
-                Live Data
-              </Button>
-              <Button
-                variant={currentView === 'arbitrage' ? 'default' : 'ghost'}
-                onClick={() => onViewChange('arbitrage')}
-                className="flex items-center gap-2"
-              >
-                <ArrowLeftRight className="h-4 w-4" />
-                Arbitrage
-              </Button>
-              <Button
-                variant={currentView === 'covered-calls' ? 'default' : 'ghost'}
-                onClick={() => onViewChange('covered-calls')}
-                className="flex items-center gap-2"
-              >
-                <Shield className="h-4 w-4" />
-                Covered Calls
-              </Button>
-            </nav>
+            <div className="flex items-center gap-2">
+              {/* Desktop Navigation */}
+              <nav className="hidden md:flex items-center space-x-1">
+                <Button
+                  variant={currentView === 'historical' ? 'default' : 'ghost'}
+                  onClick={() => onViewChange('historical')}
+                  className="flex items-center gap-2"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Historical Data
+                </Button>
+                <Button
+                  variant={currentView === 'live' ? 'default' : 'ghost'}
+                  onClick={() => onViewChange('live')}
+                  className="flex items-center gap-2"
+                >
+                  <Clock className="h-4 w-4" />
+                  Live Data
+                </Button>
+                <Button
+                  variant={currentView === 'arbitrage' || currentView === 'live-watch'? 'default' : 'ghost'}
+                  onClick={() => onViewChange('arbitrage')}
+                  className="flex items-center gap-2"
+                >
+                  <ArrowLeftRight className="h-4 w-4" />
+                  Arbitrage
+                </Button>
+                <Button
+                  variant={currentView === 'covered-calls' ? 'default' : 'ghost'}
+                  onClick={() => onViewChange('covered-calls')}
+                  className="flex items-center gap-2"
+                >
+                  <Shield className="h-4 w-4" />
+                  Covered Calls
+                </Button>
+              </nav>
 
-            {/* Mobile Menu Button */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="md:hidden"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-            </Button>
+              <NotificationCenter />
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden md:inline-flex"
+                onClick={logout}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+
+              {/* Mobile Menu Button */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="md:hidden"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              >
+                {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -117,6 +134,18 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
               >
                 <Shield className="h-4 w-4" />
                 Covered Calls
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start gap-2"
+                onClick={() => {
+                  logout();
+                  setIsMobileMenuOpen(false);
+                }}
+              >
+                <LogOut className="h-4 w-4" />
+                Logout
               </Button>
             </div>
           </div>
