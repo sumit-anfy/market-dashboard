@@ -621,7 +621,6 @@ export default function CoveredCallsDetailsPage() {
   }, [multiSymbolData, symbolIndex, isConnected]);
 
 
-
   // ---------- Trend Section State ----------
   type TrendType = "daily" | "hourly";
 
