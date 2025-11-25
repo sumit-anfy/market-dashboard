@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { SortableTableHeader } from "@/components/modal/SortableTableHeader";
-import { CoveredCallsTrendRow } from "@/types/coveredCalls";
+import { CoveredCallsTrendRow } from "@/types/market";
 
 interface CoveredCallsTrendTableProps {
     trendLoading: boolean;

@@ -228,11 +228,11 @@ export default function ArbitrageDetailsPage() {
     };
   }, [appliedFilters.startDate, appliedFilters.endDate]);
 
-  const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",  // 2-digit year → dd/mm/yy
-      }) : "-")
+  // const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB", {
+  //       day: "2-digit",
+  //       month: "2-digit",
+  //       year: "2-digit",  // 2-digit year → dd/mm/yy
+  //     }) : "-")
 
   // Fetch filtered arbitrage data
   const {

@@ -848,12 +848,6 @@ export default function CoveredCallsDetailsPage() {
     });
   };
 
-  const strToDate = (s?: string): Date | undefined => {
-    if (!s) return undefined;
-    const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? undefined : d;
-  };
-
   // Color palette for month-based row coloring (same as ArbitrageDetailsPage)
   const colorPalette = [
     "bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50",
@@ -1028,7 +1022,6 @@ export default function CoveredCallsDetailsPage() {
         isMarketOpen={isMarketOpen}
         lastSeen={lastSeen}
         error={error}
-        isConnected={isConnected}
         isReloadingFallback={isReloadingFallback}
         onReload={handleReload}
         selectedExpiry={selectedExpiry}

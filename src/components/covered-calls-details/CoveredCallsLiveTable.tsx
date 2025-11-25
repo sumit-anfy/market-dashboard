@@ -30,7 +30,6 @@ interface CoveredCallsLiveTableProps {
     isMarketOpen: boolean;
     lastSeen: { symbol: string; ts?: string }[];
     error: string | null;
-    isConnected: boolean;
     isReloadingFallback: boolean;
     onReload: () => void;
     selectedExpiry?: string;
@@ -56,7 +55,6 @@ export function CoveredCallsLiveTable({
     isMarketOpen,
     lastSeen,
     error,
-    isConnected,
     isReloadingFallback,
     onReload,
     selectedExpiry,
