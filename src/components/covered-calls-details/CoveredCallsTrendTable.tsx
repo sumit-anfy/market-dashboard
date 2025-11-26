@@ -143,24 +143,32 @@ export function CoveredCallsTrendTable({
                             >
                                 Premium %
                             </SortableTableHeader>
+                            <SortableTableHeader
+                                sortKey="premium_percentage"
+                                sortConfig={trendSortConfig}
+                                onSort={handleTrendSortColumn}
+                                align="center"
+                            >
+                                Monthly Premium %
+                            </SortableTableHeader>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {trendLoading ? (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center">
+                                <TableCell colSpan={11} className="text-center">
                                     Loading...
                                 </TableCell>
                             </TableRow>
                         ) : trendError ? (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center text-red-600">
+                                <TableCell colSpan={11} className="text-center text-red-600">
                                     Error: {trendError}
                                 </TableCell>
                             </TableRow>
                         ) : sortedTrendData.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={10} className="text-center">
+                                <TableCell colSpan={11} className="text-center">
                                     No trend data available.
                                 </TableCell>
                             </TableRow>
@@ -207,10 +215,13 @@ export function CoveredCallsTrendTable({
                                         {formatNumber(row.volume, 0)}
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        {formatNumber(row.otm)}
+                                        {formatNumber(row.otm)} %
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        {formatNumber(row.premium_percentage)}
+                                        {formatNumber(row.premium_percentage)} %
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        {formatNumber(row.monthly_percentage)} %
                                     </TableCell>
                                 </TableRow>
                             ))

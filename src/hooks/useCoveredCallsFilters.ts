@@ -11,7 +11,7 @@ interface UseCoveredCallsFiltersParams {
 }
 
 export const useCoveredCallsFilters = ({
-  instrumentId,
+  instrumentId
 }: UseCoveredCallsFiltersParams) => {
   const [symbolExpiries, setSymbolExpiries] = useState<
     CoveredCallsSymbolExpiry[]
@@ -37,9 +37,7 @@ export const useCoveredCallsFilters = ({
           setSymbolExpiries(rows);
 
           // Extract unique symbols and expiry dates
-          const uniqueSymbols = [
-            ...new Set(rows.map((item) => item.symbol)),
-          ];
+          const uniqueSymbols = [...new Set(rows.map((item) => item.symbol))];
           const uniqueExpiryDates = [
             ...new Set(rows.map((item) => item.expiry_date)),
           ].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());

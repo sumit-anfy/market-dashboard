@@ -132,6 +132,7 @@ export interface CoveredCallsSymbolExpiry {
 }
 
 export interface CoveredCallsDetailsPagination {
+  expiry_month: string[];
   page: number;
   limit: number;
   total: number;
@@ -169,6 +170,7 @@ export interface CoveredCallsTrendRow {
   volume: number;
   otm: number;
   premium_percentage: number;
+  monthly_percentage: number;
 }
 
 export interface CoveredCallsTrendResponse {

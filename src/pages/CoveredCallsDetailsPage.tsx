@@ -173,7 +173,7 @@ export default function CoveredCallsDetailsPage() {
   const {
     symbolExpiries,
     expiryDates,
-  } = useCoveredCallsFilters({ instrumentId: instrumentId! });
+  } = useCoveredCallsFilters({ instrumentId: instrumentId!});
 
   // Selected expiry date (nearest by default)
   const [selectedExpiry, setSelectedExpiry] = useState<string | undefined>();
@@ -624,7 +624,7 @@ export default function CoveredCallsDetailsPage() {
   // ---------- Trend Section State ----------
   type TrendType = "daily" | "hourly";
 
-  const [trendType, setTrendType] = useState<TrendType>("daily");
+  const [trendType, setTrendType] = useState<TrendType>("hourly");
   // const [, setTrendExpiry] = useState<string>("ALL");
   const [trendOptionType, setTrendOptionType] = useState<"ALL" | "CE" | "PE">(
     "CE"
@@ -637,6 +637,8 @@ export default function CoveredCallsDetailsPage() {
   const [trendPremiumMax, setTrendPremiumMax] = useState(25);
   const [trendStartDate, setTrendStartDate] = useState<string>("");
   const [trendEndDate, setTrendEndDate] = useState<string>("");
+  const [expiryMonth, setExpiryMonth] = useState<string>("ALL");
+  const [expiryFilter, setExpiryFilter] = useState<string[]>([]);
   const [appliedTrendFilters, setAppliedTrendFilters] = useState<{
     optionType: "ALL" | "CE" | "PE";
     otmMin: number;
@@ -645,6 +647,7 @@ export default function CoveredCallsDetailsPage() {
     premiumMax: number;
     startDate: string;
     endDate: string;
+    expiryMonth: string;
   }>({
     optionType: "CE",
     otmMin: -50,
@@ -653,12 +656,14 @@ export default function CoveredCallsDetailsPage() {
     premiumMax: 25,
     startDate: "",
     endDate: "",
+    expiryMonth: "ALL"
   });
 
   const [trendData, setTrendData] = useState<CoveredCallsTrendRow[]>([]);
   const [trendLoading, setTrendLoading] = useState(false);
   const [trendError, setTrendError] = useState<string | null>(null);
   const [trendPagination, setTrendPagination] = useState<{
+    expiry_month: string[];
     page: number;
     limit: number;
     total: number;
@@ -782,6 +787,9 @@ export default function CoveredCallsDetailsPage() {
         if (appliedTrendFilters.endDate) {
           params.endDate = appliedTrendFilters.endDate;
         }
+        if (expiryMonth && expiryMonth !== "ALL") {
+          params.expiryMonth = expiryMonth;
+        }
 
         const resp = await apiClient.get<CoveredCallsTrendResponse>(url, {
           params,
@@ -793,6 +801,7 @@ export default function CoveredCallsDetailsPage() {
 
         setTrendData(resp.data.data || []);
         setTrendPagination(resp.data.pagination);
+        setExpiryFilter(resp.data.pagination.expiry_month)
       } catch (e: any) {
         // Ignore axios cancellation (common on rapid filter changes / StrictMode)
         if (e?.cancelled || e?.message === "canceled" || e?.code === "ERR_CANCELED") {
@@ -825,6 +834,7 @@ export default function CoveredCallsDetailsPage() {
       premiumMax: trendPremiumMax,
       startDate: trendStartDate || "",
       endDate: trendEndDate || "",
+      expiryMonth: expiryMonth === "ALL" ? "" : expiryMonth
     });
   };
 
@@ -845,7 +855,9 @@ export default function CoveredCallsDetailsPage() {
       premiumMax: 25,
       startDate: "",
       endDate: "",
+      expiryMonth: "ALL"
     });
+    setExpiryMonth("ALL");
   };
 
   // Color palette for month-based row coloring (same as ArbitrageDetailsPage)
@@ -1047,6 +1059,9 @@ export default function CoveredCallsDetailsPage() {
             setTrendType={setTrendType}
             trendOptionType={trendOptionType}
             setTrendOptionType={setTrendOptionType}
+            expiryMonth={expiryMonth}
+            setExpiryMonth={setExpiryMonth}
+            expiryFilter={expiryFilter}
             trendOtmMin={trendOtmMin}
             setTrendOtmMin={setTrendOtmMin}
             trendOtmMax={trendOtmMax}

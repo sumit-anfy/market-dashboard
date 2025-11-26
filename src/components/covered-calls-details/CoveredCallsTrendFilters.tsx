@@ -8,12 +8,17 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select } from "@radix-ui/react-select";
+import { SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 interface CoveredCallsTrendFiltersProps {
     trendType: "daily" | "hourly";
     setTrendType: (value: "daily" | "hourly") => void;
     trendOptionType: "ALL" | "CE" | "PE";
     setTrendOptionType: (value: "ALL" | "CE" | "PE") => void;
+    expiryMonth: string;
+    setExpiryMonth: (value: string) => void;
+    expiryFilter: string[];
     trendOtmMin: number;
     setTrendOtmMin: (value: number) => void;
     trendOtmMax: number;
@@ -36,6 +41,9 @@ export function CoveredCallsTrendFilters({
     setTrendType,
     trendOptionType,
     setTrendOptionType,
+    expiryMonth,
+    setExpiryMonth,
+    expiryFilter,
     trendOtmMin,
     setTrendOtmMin,
     trendOtmMax,
@@ -88,7 +96,7 @@ export function CoveredCallsTrendFilters({
                         Reset Filters
                     </Button>
                 </div>
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5">
                     {/* Option Type */}
                     <div className="space-y-6">
                         <Label className="text-sm font-medium">Option Type</Label>
@@ -119,6 +127,27 @@ export function CoveredCallsTrendFilters({
                             </div>
                         </RadioGroup>
                     </div>
+
+                    <div className="space-y-4">
+                        <Label className="text-sm font-medium">Expiry Month</Label>
+                        <Select
+                            value={expiryMonth || "ALL"}
+                            onValueChange={(value) => setExpiryMonth(value)}
+                        >
+                            <SelectTrigger className="w-[160px]">
+                                <SelectValue placeholder="Select expiry" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="ALL">All</SelectItem>
+                                {expiryFilter?.map((month) => (
+                                  <SelectItem key={month.trim()} value={month}>
+                                    {month}
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+
 
                     {/* OTM % Range */}
                     <div className="space-y-8">

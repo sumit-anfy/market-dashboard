@@ -256,7 +256,7 @@ export default function ArbitrageDetailsPage() {
   // Sorting for Historical Arbitrage Patterns table
   const [sortConfig, setSortConfig] = useState<TableSortConfig | null>({
     key: "date",
-    direction: "asc",
+    direction: "desc",
   });
 
   const handleSortColumn = (key: SortKey) => {

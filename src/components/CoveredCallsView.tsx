@@ -24,6 +24,7 @@ import { RefreshCw, Loader2, Search } from "lucide-react";
 import { config } from "@/config/api";
 import { RadioGroup } from "@radix-ui/react-radio-group";
 import { RadioGroupItem } from "./ui/radio-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 type FiltersState = {
   underlying: string;
@@ -32,6 +33,7 @@ type FiltersState = {
   otmMax: number;
   premiumMin: number;
   premiumMax: number;
+  expiryMonth: string;
 };
 
 interface CoveredCallData {
@@ -46,6 +48,7 @@ interface CoveredCallData {
   optionType: string;
   otm: number | null;
   premiumPercent: number | null;
+  monthlyPercent: number | null;
 }
 
 interface LoadingState {
@@ -89,11 +92,13 @@ export function CoveredCallsView() {
     otmMax: 50,
     premiumMin: 0,
     premiumMax: 25,
+    expiryMonth: ""
   });
 
   // Applied filters state (used for API calls)
   const [appliedFilters, setAppliedFilters] = useState<FiltersState>(filters);
   const [optionFilter, setOptionFilter] = useState<"" | "CE" | "PE">("CE");
+  const [expiryFilter, setExpiryFilter] = useState<string[]>([]);
 
   // Fetch covered calls data from API with pagination and filters
   const fetchCoveredCallsData = useCallback(
@@ -114,6 +119,9 @@ export function CoveredCallsView() {
         if (filtersForApi.optionType) {
           params.append("optionType", filtersForApi.optionType);
         }
+        if (filtersForApi.expiryMonth.trim()) {
+          params.append("expiryMonth", filtersForApi.expiryMonth);
+        }
         // Always send OTM and Premium filters (including default values)
         params.append("minOtm", filtersForApi.otmMin.toString());
         params.append("maxOtm", filtersForApi.otmMax.toString());
@@ -124,6 +132,7 @@ export function CoveredCallsView() {
           success: boolean;
           data: CoveredCallData[];
           avg_premium: number;
+          expiry_month?: string[];
           count: number;
           total: number;
           page: number;
@@ -135,6 +144,17 @@ export function CoveredCallsView() {
         if (response.data.success) {
           setOptionContractsData(response.data.data);
           // setAvgPremium(response.data.avg_premium || 0);
+          const expiryList =
+            response.data.expiry_month ??
+            [];
+          const normalized = Array.from(
+            new Set(
+              (expiryList || [])
+                .map((m) => (m ? m.toString().trim() : ""))
+                .filter(Boolean)
+            )
+          ).sort((a, b) => a.localeCompare(b));
+          setExpiryFilter(normalized);
           setPagination({
             total: response.data.total,
             page: response.data.page,
@@ -216,6 +236,7 @@ export function CoveredCallsView() {
       otmMax: 50,
       premiumMin: 0,
       premiumMax: 25,
+      expiryMonth: ""
     };
     setFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
@@ -282,7 +303,7 @@ export function CoveredCallsView() {
       {/* Filters - Always visible */}
       <Card>
         <CardContent>
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mt-4">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5 mt-4">
             {/* Underlying Symbol Filter - Elastic Search */}
             <div className="space-y-4">
               <Label className="text-sm font-medium">Underlying Symbol</Label>
@@ -324,20 +345,29 @@ export function CoveredCallsView() {
                       <Label htmlFor="PE" className="text-sm font-normal">Put (PE)</Label>
                     </div>
                   </RadioGroup>
-              {/* <select
-                value={filters.optionType}
-                onChange={(e) =>
-                  setFilters((prev) => ({
+            </div>
+
+            <div className="space-y-4">
+              <Label className="text-sm font-medium">Expiry Month</Label>
+                <Select
+                    value={filters.expiryMonth || "ALL"}
+                    onValueChange={(value) => setFilters((prev) => ({
                     ...prev,
-                    optionType: e.target.value,
-                  }))
-                }
-                className="w-full h-9 px-3 border border-input rounded-md bg-background text-sm"
-              >
-                <option value="">All</option>
-                <option value="CE">Call (CE)</option>
-                <option value="PE">Put (PE)</option>
-              </select> */}
+                    expiryMonth: value,
+                  }))}
+                >
+                    <SelectTrigger className="w-[160px]">
+                        <SelectValue placeholder="Select expiry" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="ALL">All</SelectItem>
+                        {expiryFilter?.map((month) => (
+                          <SelectItem key={month.trim()} value={month}>
+                            {month}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
 
             {/* OTM % Filter - Dual Slider */}
@@ -708,6 +738,9 @@ export function CoveredCallsView() {
                       <TableHead className="text-center font-semibold">
                         Premium %
                       </TableHead>
+                      <TableHead className="text-center font-semibold">
+                        Monthly Premium %
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -739,6 +772,7 @@ export function CoveredCallsView() {
                                 optionType: option.optionType,
                                 otm: String(option.otm ?? ''),
                                 premiumPercent: String(option.premiumPercent ?? ''),
+                                monthlyPercent: String(option.monthlyPercent ?? ''),
                               }).toString();
                             window.open(url, '_blank');
                           }}
@@ -778,12 +812,18 @@ export function CoveredCallsView() {
                               : "N/A"}
                             %
                           </TableCell>
+                          <TableCell className="text-center font-mono text-base">
+                            {option.monthlyPercent !== null
+                              ? option.monthlyPercent
+                              : "N/A"}
+                            %
+                          </TableCell>
                         </TableRow>
                       );
                     })}
                   </TableBody>
                 </Table>
-              </div>
+            </div>
             </CardContent>
           </Card>
 
