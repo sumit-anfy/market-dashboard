@@ -140,7 +140,7 @@ export function CoveredCallsTrendFilters({
                             <SelectContent>
                                 <SelectItem value="ALL">All</SelectItem>
                                 {expiryFilter?.map((month) => (
-                                  <SelectItem key={month.trim()} value={month}>
+                                  <SelectItem key={month?.trim()} value={month}>
                                     {month}
                                   </SelectItem>
                                 ))}

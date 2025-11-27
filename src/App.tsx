@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { HistoricalDataView } from '@/components/HistoricalData';
-import { LiveDataView } from '@/components/LiveData';
+import { LiveStockDataView } from '@/components/live/LiveStockData';
 import { ArbitrageView } from '@/components/ArbitrageView';
 import { CoveredCallsView } from '@/components/CoveredCallsView';
 import ArbitrageDetailsPage from '@/pages/ArbitrageDetailsPage';
@@ -10,6 +10,7 @@ import CoveredCallsDetailsPage from '@/pages/CoveredCallsDetailsPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { useAuth } from '@/hooks/useAuth';
 import { FloatingThemeToggle } from '@/components/FloatingThemeToggle';
+import { Toaster } from '@/components/ui/toaster';
 // import { LiveMarketWatch } from '@/components/LiveMarketWatch';
 
 type View = 'historical' | 'live' | 'arbitrage' | 'covered-calls' | 'live-watch';
@@ -99,7 +100,7 @@ function App() {
               <Layout currentView={currentView} onViewChange={handleViewChange}>
                 <Routes>
                   <Route path="/historical" element={<HistoricalDataView />} />
-                  <Route path="/live" element={<LiveDataView />} />
+                  <Route path="/live" element={<LiveStockDataView />} />
                   <Route path="/arbitrage" element={<ArbitrageView />} />
                   <Route path="/covered-calls" element={<CoveredCallsView />} />
                   <Route path="/" element={<ArbitrageView />} />
@@ -110,6 +111,7 @@ function App() {
         />
       </Routes>
       <FloatingThemeToggle />
+      <Toaster />
     </>
   );
 }

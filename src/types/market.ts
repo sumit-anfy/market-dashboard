@@ -27,6 +27,36 @@ export interface LiveData extends MarketData {
   totalTradedVolume: number;
 }
 
+export interface EquityInstrument {
+  id: number;
+  instrumentType: string;
+  exchange: string;
+}
+
+export interface DerivativeSymbol {
+  id: number;
+  symbol: string;
+  segment: "FUT" | "OPT" | null;
+  expiryDate?: string | Date | null;
+  strike?: string | null;
+  optionType?: string | null;
+  expiryMonth?: string | null;
+}
+
+export interface LiveTick {
+  symbol: string;
+  ltp: number;
+  volume?: number;
+  bid?: number;
+  bidQty?: number;
+  ask?: number;
+  askQty?: number;
+  timestamp: string;
+   prevLtp?: number;
+  change?: number;
+  changePercent?: number;
+}
+
 // Enhanced interfaces for multi-symbol support
 export interface OHLCData {
   timestamp: string;

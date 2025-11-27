@@ -119,8 +119,8 @@ export function CoveredCallsView() {
         if (filtersForApi.optionType) {
           params.append("optionType", filtersForApi.optionType);
         }
-        if (filtersForApi.expiryMonth.trim()) {
-          params.append("expiryMonth", filtersForApi.expiryMonth);
+        if (filtersForApi.expiryMonth) {
+          params.append("expiryMonth", filtersForApi.expiryMonth?.trim());
         }
         // Always send OTM and Premium filters (including default values)
         params.append("minOtm", filtersForApi.otmMin.toString());
@@ -362,7 +362,7 @@ export function CoveredCallsView() {
                     <SelectContent>
                         <SelectItem value="ALL">All</SelectItem>
                         {expiryFilter?.map((month) => (
-                          <SelectItem key={month.trim()} value={month}>
+                          <SelectItem key={month?.trim()} value={month}>
                             {month}
                           </SelectItem>
                         ))}
@@ -453,7 +453,7 @@ export function CoveredCallsView() {
 
             {/* Premium % Filter - Dual Slider */}
             <div className="space-y-8">
-              <Label className="text-sm font-medium">Premium Range</Label>
+              <Label className="text-sm font-medium">Monthly Premium Range</Label>
               <div className="space-y-4">
                 <div className="relative w-full px-3">
                   {/* Slider */}
