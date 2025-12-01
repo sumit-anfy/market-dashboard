@@ -86,11 +86,12 @@ export function DataTableHead({ children, className, sortable, onClick }: DataTa
 interface DataTableCellProps {
   children: React.ReactNode;
   className?: string;
+  colSpan?: number;
 }
 
-export function DataTableCell({ children, className }: DataTableCellProps) {
+export function DataTableCell({ children, className, colSpan }: DataTableCellProps) {
   return (
-    <td className={cn("p-4 align-middle", className)}>
+    <td className={cn("p-4 align-middle", className)} colSpan={colSpan}>
       {children}
     </td>
   );

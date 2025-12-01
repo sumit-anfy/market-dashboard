@@ -1,23 +1,52 @@
-import React, { useState, useMemo } from 'react';
-import { Download, Filter, Search, TrendingUp, TrendingDown } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Download, Filter, TrendingUp, TrendingDown, Calendar as CalendarIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DataTable, DataTableHeader, DataTableBody, DataTableRow, DataTableHead, DataTableCell } from '@/components/ui/data-table';
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from '@/components/ui/pagination';
-import { HistoricalData, FilterOptions } from '@/types/market';
-import { generateHistoricalData } from '@/lib/mockData';
+import { HistoricalData, FilterOptions, EquityInstrument } from '@/types/market';
+import { apiClient } from '@/config/axiosClient';
+import { toast } from '@/hooks/use-toast';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+type ExtendedHistoricalData = HistoricalData & {
+  month?: string;
+  strike?: string | number;
+  expiry?: string;
+};
 
 export function HistoricalDataView() {
-  const [data] = useState<HistoricalData[]>(generateHistoricalData(90));
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
-  const [sortField, setSortField] = useState<keyof HistoricalData>('timestamp');
+  const [data, setData] = useState<ExtendedHistoricalData[]>([]);
+  const [sortField, setSortField] = useState<keyof ExtendedHistoricalData>('timestamp');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedSymbol, setSelectedSymbol] = useState<string>('');
+  const [selectedSymbolId, setSelectedSymbolId] = useState<number | string | null>(null);
+  const [symbolOptions, setSymbolOptions] = useState<EquityInstrument[]>([]);
+  const [isLoadingSymbols, setIsLoadingSymbols] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
+  const [symbolsError, setSymbolsError] = useState<string | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [paginationMeta, setPaginationMeta] = useState({
+    total: 0,
+    limit: 360,
+    offset: 0,
+    hasMore: false,
+  });
+  const [queryOffset, setQueryOffset] = useState(0);
+  const [pendingDateRange, setPendingDateRange] = useState<{ from: Date | null; to: Date | null }>({
+    from: null,
+    to: null,
+  });
   const [filters, setFilters] = useState<FilterOptions>({
     segment: [],
     symbol: '',
@@ -28,7 +57,256 @@ export function HistoricalDataView() {
     maxVolume: null,
   });
 
-  const handleSort = (field: keyof HistoricalData) => {
+  const loadSymbolsFromApi = useCallback(async () => {
+    setIsLoadingSymbols(true);
+    setSymbolsError(null);
+    try {
+      const equitiesResponse = await apiClient.get<ApiResponse<EquityInstrument[]>>('/api/live-data/equities');
+      const equities = (equitiesResponse.data?.data || []).map((equity) => ({
+        ...equity,
+        id: Number(equity.id),
+      }));
+
+      if (!equities.length) {
+        setSymbolOptions([]);
+        setSymbolsError('No symbols available from the server.');
+        return;
+      }
+
+      setSymbolOptions(equities);
+
+    } catch (error) {
+      console.error('Failed to load symbols for Historical Data filters', error);
+      setSymbolsError('Unable to load symbols from server. Showing local list.');
+      toast({
+        title: 'Symbol list unavailable',
+        description: 'The API is unavailable. Using local symbols instead.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoadingSymbols(false);
+    }
+  }, []);
+
+  const displayValue = (value: any) =>
+    value === null || value === undefined || value === '' ? '-' : value;
+
+  const formatDate = (value: any) => {
+    if (!value) return '-';
+    const dateObj = typeof value === 'string' ? new Date(value) : value instanceof Date ? value : null;
+    if (!dateObj || Number.isNaN(dateObj.getTime())) return displayValue(value);
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const year = String(dateObj.getFullYear()).slice(-2);
+    return `${day}/${month}/${year}`;
+  };
+
+  const displayNumber = (value: any, digits?: number) => {
+    if (value === null || value === undefined || value === '') return '-';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return value || '-';
+    return digits !== undefined ? num.toFixed(digits) : num.toString();
+  };
+
+  const displayVolume = (value: any) => {
+    if (value === null || value === undefined || value === '') return '-';
+    const num = Number(value);
+    if (!Number.isFinite(num)) return value || '-';
+    return num.toLocaleString();
+  };
+
+  const toNumericId = (value: string | number | null | undefined) => {
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const toCsvValue = (value: any) => {
+    const display = displayValue(value);
+    const str = typeof display === 'string' ? display : String(display);
+    const escaped = str.replace(/"/g, '""');
+    return `"${escaped}"`;
+  };
+
+  const handleServerPageChange = (direction: 'next' | 'prev') => {
+    const limit = paginationMeta.limit || 100;
+    if (direction === 'next') {
+      const nextOffset = paginationMeta.offset + limit;
+      if (paginationMeta.hasMore || nextOffset < paginationMeta.total) {
+        setQueryOffset(nextOffset);
+      }
+    } else {
+      const prevOffset = Math.max(0, paginationMeta.offset - limit);
+      if (prevOffset !== paginationMeta.offset) {
+        setQueryOffset(prevOffset);
+      }
+    }
+  };
+
+  const fetchHistoricalData = useCallback(
+    async (
+      segment: string,
+      symbolObject: { name: string; id: string | number | null },
+      offset: number = 0
+    ) => {
+      setIsLoadingData(true);
+      setDataError(null);
+
+      try {
+        let url = '';
+        const params: Record<string, string | number> = {
+          limit: paginationMeta.limit || 100,
+          offset,
+        };
+        const fromDate = filters.dateRange.from
+          ? filters.dateRange.from.toISOString().split('T')[0]
+          : undefined;
+        const toDate = filters.dateRange.to
+          ? filters.dateRange.to.toISOString().split('T')[0]
+          : undefined;
+        if (fromDate) params.startDate = fromDate;
+        if (toDate) params.endDate = toDate;
+
+        switch (segment) {
+          case 'NSE_EQ':
+            url = '/api/nse-equity';
+            params.symbol = symbolObject.name;
+            break;
+          case 'NSE_FUT':
+            url = '/api/nse-futures';
+            {
+              const underlyingId = Number(symbolObject.id);
+              if (!Number.isFinite(underlyingId)) {
+                setData([]);
+                setDataError('Symbol ID is required for NSE_FUT.');
+                setIsLoadingData(false);
+                return;
+              }
+              params.underlying = underlyingId;
+            }
+            break;
+          case 'NSE_OPT':
+            url = '/api/nse-options';
+            {
+              const underlyingId = Number(symbolObject.id);
+              if (!Number.isFinite(underlyingId)) {
+                setData([]);
+                setDataError('Symbol ID is required for NSE_OPT.');
+                setIsLoadingData(false);
+                return;
+              }
+              params.underlying = underlyingId;
+            }
+            break;
+          case 'BSE_EQ':
+            url = '/api/bse-equity';
+            params.underlying = symbolObject.name;
+            break;
+          default:
+            setData([]);
+            setDataError('Unsupported segment selected.');
+            setIsLoadingData(false);
+            return;
+        }
+
+        if (!url) {
+          setData([]);
+          setIsLoadingData(false);
+          return;
+        }
+
+        const response = await apiClient.get<ApiResponse<any[]>>(url, {
+          params,
+          paramsSerializer: (p) => {
+            const usp = new URLSearchParams();
+            Object.entries(p).forEach(([key, value]) => {
+              if (value === undefined || value === null) return;
+              const num = Number(value);
+              usp.append(key, Number.isFinite(num) ? String(num) : String(value));
+            });
+            return usp.toString();
+          },
+        });
+        const rows = response.data?.data || [];
+
+        const toNumber = (value: any) => {
+          const num = Number(value);
+          return Number.isFinite(num) ? num : 0;
+        };
+
+        const mapped: ExtendedHistoricalData[] = rows.map((row, index) => {
+          const price =
+            row.price ?? row.close ?? row.ltp ?? row.last_price ?? row.last ?? row.open ?? null;
+          const previousClose =
+            row.previousClose ?? row.prev_close ?? row.previous_close ?? row.close ?? null;
+          const change =
+            row.change ?? row.change_amount ??
+            (price !== null && previousClose !== null
+              ? Number(price) - Number(previousClose)
+              : null);
+          const changePercent =
+            row.changePercent ?? row.change_percent ?? row.change_percentage ??
+            (change !== null && previousClose
+              ? (Number(change) / Number(previousClose)) * 100
+              : null);
+
+          const expiryValue =
+            row.expiry ??
+            row.expiry_date ??
+            row.expiryDate ??
+            row.expiryDateString ??
+            row.expiry_date_string ??
+            null;
+
+          const expiryDateObj = expiryValue ? new Date(expiryValue) : undefined;
+          const monthValue =
+            row.expiryMonth ??
+            row.expiry_month ??
+            (expiryDateObj ? expiryDateObj.toLocaleString('en-US', { month: 'long' }) : null);
+
+          return {
+            id: (row.id ?? `${symbolObject.name}-${index}`).toString(),
+            symbol: row.symbol ?? symbolObject.name ?? '-',
+            segment: row.segment ?? segment,
+            price: toNumber(price),
+            previousClose: toNumber(previousClose),
+            change: toNumber(change),
+            changePercent: toNumber(changePercent),
+            volume: toNumber(row.volume ?? row.total_traded_volume ?? row.totalVolume ?? row.traded_qty),
+            high: toNumber(row.high ?? row.high_price ?? row.day_high),
+            low: toNumber(row.low ?? row.low_price ?? row.day_low),
+            open: toNumber(row.open ?? row.open_price),
+            timestamp: row.timestamp ? new Date(row.timestamp) : row.date ? new Date(row.date) : new Date(),
+            date: row.date ?? row.time ?? row.trade_date ?? row.timestamp ?? '',
+            turnover: toNumber(toNumber(price) * toNumber(row.volume)),
+            month: monthValue ?? undefined,
+            strike: row.strike ?? row.strike_price ?? undefined,
+            expiry: expiryDateObj ? expiryDateObj.toISOString() : undefined,
+          } as ExtendedHistoricalData;
+        });
+
+        setData(mapped);
+        const pagination = (response.data as any)?.pagination || {};
+        const limitValue = Number(pagination.limit ?? params.limit ?? mapped.length ?? 100);
+        const offsetValue = Number(pagination.offset ?? offset ?? 0);
+        const totalValue = Number(pagination.total ?? mapped.length ?? 0);
+        setPaginationMeta({
+          total: Number.isFinite(totalValue) ? totalValue : mapped.length,
+          limit: Number.isFinite(limitValue) ? limitValue : 100,
+          offset: Number.isFinite(offsetValue) ? offsetValue : 0,
+          hasMore: Boolean(pagination.hasMore),
+        });
+      } catch (error) {
+        console.error('Failed to fetch historical data', error);
+        setData([]);
+        setDataError('Unable to fetch historical data for the selected filters.');
+      } finally {
+        setIsLoadingData(false);
+      }
+    },
+    [paginationMeta.limit]
+  );
+
+  const handleSort = (field: keyof ExtendedHistoricalData) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -37,10 +315,73 @@ export function HistoricalDataView() {
     }
   };
 
+  useEffect(() => {
+    loadSymbolsFromApi();
+  }, [loadSymbolsFromApi]);
+
+  const selectedSegment = useMemo(() => filters.segment[0] || '', [filters.segment]);
+  const dateBounds = useMemo(() => {
+    if (selectedSegment === 'NSE_EQ') {
+      return { min: new Date('2019-01-01'), max: new Date() };
+    }
+    if (selectedSegment === 'NSE_FUT' || selectedSegment === 'NSE_OPT') {
+      return { min: new Date('2022-01-01'), max: new Date() };
+    }
+    return { min: null, max: new Date() };
+  }, [selectedSegment]);
+
+  useEffect(() => {
+    setQueryOffset(0);
+    if (selectedSegment === 'NSE_EQ') {
+      setFilters((prev) => ({
+        ...prev,
+        dateRange: {
+          from: prev.dateRange.from ?? new Date('2019-01-01'),
+          to: prev.dateRange.to ?? new Date(),
+        },
+      }));
+    }
+  }, [selectedSegment, selectedSymbol]);
+
+  useEffect(() => {
+    if (!selectedSymbol || !selectedSegment) {
+      setData([]);
+      setDataError(null);
+      setPaginationMeta((prev) => ({
+        total: 0,
+        limit: prev.limit || 100,
+        offset: 0,
+        hasMore: false,
+      }));
+      return;
+    }
+
+    const symbolObject = { name: selectedSymbol, id: selectedSymbolId };
+    fetchHistoricalData(selectedSegment, symbolObject, queryOffset);
+  }, [fetchHistoricalData, selectedSegment, selectedSymbol, selectedSymbolId, queryOffset]);
+
   const filteredAndSortedData = useMemo(() => {
     let filtered = data.filter(item => {
       if (filters.symbol && !item.symbol.toLowerCase().includes(filters.symbol.toLowerCase())) return false;
-      if (filters.segment.length > 0 && !filters.segment.includes(item.segment)) return false;
+      if (filters.segment.length > 0) {
+        const itemSegment = (item.segment || '').toUpperCase();
+        const activeSegment = selectedSegment.toUpperCase();
+        const segmentMatches =
+          !item.segment ||
+          filters.segment.includes(item.segment) ||
+          (activeSegment === 'NSE_FUT' && itemSegment === 'FUT') ||
+          (activeSegment === 'NSE_OPT' && itemSegment === 'OPT') ||
+          activeSegment === itemSegment;
+
+        if (!segmentMatches) return false;
+      }
+      if (filters.dateRange.from || filters.dateRange.to) {
+        const itemDate = item.date ? new Date(item.date) : null;
+        if (itemDate && !Number.isNaN(itemDate.getTime())) {
+          if (filters.dateRange.from && itemDate < filters.dateRange.from) return false;
+          if (filters.dateRange.to && itemDate > filters.dateRange.to) return false;
+        }
+      }
       if (filters.minPrice !== null && item.price < filters.minPrice) return false;
       if (filters.maxPrice !== null && item.price > filters.maxPrice) return false;
       if (filters.minVolume !== null && item.volume < filters.minVolume) return false;
@@ -48,11 +389,7 @@ export function HistoricalDataView() {
       return true;
     });
 
-    if (selectedSymbol) {
-      filtered = filtered.filter(item => item.symbol === selectedSymbol);
-    }
-
-    return filtered.sort((a, b) => {
+    const sorted = filtered.sort((a, b) => {
       const aVal = a[sortField];
       const bVal = b[sortField];
       
@@ -70,133 +407,112 @@ export function HistoricalDataView() {
       
       return 0;
     });
-  }, [data, filters, sortField, sortDirection, selectedSymbol]);
 
-  const totalPages = Math.ceil(filteredAndSortedData.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedData = filteredAndSortedData.slice(startIndex, endIndex);
+    const adjusted = sorted.map((row, index) => {
+      const nextRow = sorted[index + 1];
+      if (!nextRow) return row;
 
-  // Reset to first page when filters change
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [filters, selectedSymbol, sortField, sortDirection]);
+      const change = row.price - nextRow.price;
+      const changePercent =
+        nextRow.price !== 0 ? (change / nextRow.price) * 100 : row.changePercent;
+
+      return {
+        ...row,
+        change,
+        changePercent,
+      };
+    });
+
+    return adjusted;
+  }, [data, filters, sortField, sortDirection, selectedSymbol, selectedSegment]);
+
+  const showingFrom = filteredAndSortedData.length ? paginationMeta.offset + 1 : 0;
+  const showingTo = filteredAndSortedData.length ? paginationMeta.offset + filteredAndSortedData.length : 0;
+  const totalRecords = paginationMeta.total || filteredAndSortedData.length;
+  const columnCount = useMemo(() => {
+    let count = 8; // base columns without derivative extras
+    if (selectedSegment === 'NSE_FUT') count += 1;
+    if (selectedSegment === 'NSE_OPT') count += 3;
+    return count;
+  }, [selectedSegment]);
 
   const exportToCsv = () => {
-    const headers = ['Symbol', 'Segment', 'Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'Change%', 'Turnover'];
-    const csvContent = [
-      headers.join(','),
-      ...filteredAndSortedData.map(row => [
-        row.symbol,
-        row.segment,
-        row.date,
-        row.open,
-        row.high,
-        row.low,
-        row.price,
-        row.volume,
-        row.changePercent.toFixed(2),
-        row.turnover
-      ].join(','))
-    ].join('\n');
+    if (!selectedSegment || filteredAndSortedData.length === 0) {
+      toast({
+        title: 'Nothing to export',
+        description: 'Load data for a segment and apply filters before exporting.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const headers = [
+      'Symbol',
+      'Segment',
+      'Date',
+      ...(selectedSegment === 'NSE_FUT' || selectedSegment === 'NSE_OPT' ? ['Month'] : []),
+      ...(selectedSegment === 'NSE_OPT' ? ['Strike', 'Expiry'] : []),
+      'Open',
+      'High',
+      'Low',
+      'Close',
+      'Volume',
+      'Change%',
+      'Turnover',
+    ];
+
+    const rows = filteredAndSortedData.map((row) => {
+      const cells: (string | number)[] = [
+        displayValue(row.symbol),
+        selectedSegment || displayValue(row.segment),
+        formatDate(row.date),
+      ];
+
+      if (selectedSegment === 'NSE_FUT' || selectedSegment === 'NSE_OPT') {
+        cells.push(displayValue(row.month));
+      }
+
+      if (selectedSegment === 'NSE_OPT') {
+        cells.push(displayValue(row.strike), formatDate(row.expiry));
+      }
+
+      cells.push(
+        displayNumber(row.open, 2),
+        displayNumber(row.high, 2),
+        displayNumber(row.low, 2),
+        displayNumber(row.price, 2),
+        displayVolume(row.volume),
+        displayNumber(row.changePercent, 2),
+        displayNumber(row.turnover, 2)
+      );
+
+      return cells.map(toCsvValue).join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+
+    const fileNameParts = [
+      'historical_data',
+      selectedSegment.toLowerCase(),
+      selectedSymbol ? selectedSymbol.replace(/\s+/g, '_') : null,
+    ].filter(Boolean);
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'historical_data.csv';
+    a.download = `${fileNameParts.join('_')}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
 
-  const uniqueSymbols = useMemo(() => 
-    Array.from(new Set(data.map(d => d.symbol))).sort()
-  , [data]);
-
-  const renderPaginationItems = () => {
-    const items = [];
-    const maxVisiblePages = 5;
-    
-    if (totalPages <= maxVisiblePages) {
-      for (let i = 1; i <= totalPages; i++) {
-        items.push(
-          <PaginationItem key={i}>
-            <PaginationLink
-              onClick={() => setCurrentPage(i)}
-              isActive={currentPage === i}
-              className="cursor-pointer"
-            >
-              {i}
-            </PaginationLink>
-          </PaginationItem>
-        );
-      }
-    } else {
-      // Always show first page
-      items.push(
-        <PaginationItem key={1}>
-          <PaginationLink
-            onClick={() => setCurrentPage(1)}
-            isActive={currentPage === 1}
-            className="cursor-pointer"
-          >
-            1
-          </PaginationLink>
-        </PaginationItem>
-      );
-
-      if (currentPage > 3) {
-        items.push(
-          <PaginationItem key="ellipsis1">
-            <PaginationEllipsis />
-          </PaginationItem>
-        );
-      }
-
-      // Show pages around current page
-      const start = Math.max(2, currentPage - 1);
-      const end = Math.min(totalPages - 1, currentPage + 1);
-
-      for (let i = start; i <= end; i++) {
-        items.push(
-          <PaginationItem key={i}>
-            <PaginationLink
-              onClick={() => setCurrentPage(i)}
-              isActive={currentPage === i}
-              className="cursor-pointer"
-            >
-              {i}
-            </PaginationLink>
-          </PaginationItem>
-        );
-      }
-
-      if (currentPage < totalPages - 2) {
-        items.push(
-          <PaginationItem key="ellipsis2">
-            <PaginationEllipsis />
-          </PaginationItem>
-        );
-      }
-
-      // Always show last page
-      if (totalPages > 1) {
-        items.push(
-          <PaginationItem key={totalPages}>
-            <PaginationLink
-              onClick={() => setCurrentPage(totalPages)}
-              isActive={currentPage === totalPages}
-              className="cursor-pointer"
-            >
-              {totalPages}
-            </PaginationLink>
-          </PaginationItem>
-        );
-      }
+  const availableSymbols = useMemo(() => {
+    if (symbolOptions.length) {
+      return symbolOptions.map((option) => option.instrumentType);
     }
 
-    return items;
-  };
+    return Array.from(new Set(data.map((d) => d.symbol))).sort();
+  }, [data, symbolOptions]);
 
   return (
     <div className="space-y-6">
@@ -221,18 +537,45 @@ export function HistoricalDataView() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Symbol</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search symbols..."
-                  value={filters.symbol}
-                  onChange={(e) => setFilters({ ...filters, symbol: e.target.value })}
-                  className="pl-10"
-                />
-              </div>
+              <Select
+                value={selectedSymbol || 'all'}
+                onValueChange={(value) => {
+                  if (value === 'all') {
+                    setSelectedSymbol('');
+                    setSelectedSymbolId(null);
+                  } else {
+                    setSelectedSymbol(value);
+                    const matched = symbolOptions.find((option) => option.instrumentType === value);
+                    setSelectedSymbolId(toNumericId(matched?.id));
+                  }
+                  setFilters((prev) => ({ ...prev, symbol: '' }));
+                }}
+                disabled={isLoadingSymbols && availableSymbols.length === 0}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={isLoadingSymbols ? "Loading symbols..." : "All symbols"} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All symbols</SelectItem>
+                  {isLoadingSymbols && availableSymbols.length === 0 && (
+                    <SelectItem value="loading" disabled>
+                      Loading...
+                    </SelectItem>
+                  )}
+                  {availableSymbols.map((symbol) => (
+                    <SelectItem key={symbol} value={symbol}>
+                      {symbol}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {symbolsError && (
+                <p className="text-xs text-destructive">{symbolsError}</p>
+              )}
             </div>
             
             <div className="space-y-2">
@@ -244,33 +587,108 @@ export function HistoricalDataView() {
                 <SelectContent>
                   <SelectItem value="all">All segments</SelectItem>
                   <SelectItem value="NSE_EQ">NSE Equity</SelectItem>
-                  <SelectItem value="NSE_FO">NSE F&O</SelectItem>
+                  <SelectItem value="NSE_FUT">NSE Futures</SelectItem>
+                  <SelectItem value="NSE_OPT">NSE Options</SelectItem>
                   <SelectItem value="BSE_EQ">BSE Equity</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
             <div className="space-y-2">
-              <label className="text-sm font-medium">Min Price</label>
-              <Input
-                type="number"
-                placeholder="0.00"
-                value={filters.minPrice || ''}
-                onChange={(e) => setFilters({ ...filters, minPrice: e.target.value ? parseFloat(e.target.value) : null })}
-              />
+              <label className="text-sm font-medium">Date Range</label>
+              <div className="grid gap-2 grid-cols-1 sm:grid-cols-[1fr_auto_1fr] items-center">
+                <div className="flex-1 flex flex-col">
+                  <span className="text-[10px] text-muted-foreground sm:hidden mb-1">From</span>
+                  <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
+                    <Input
+                      type="text"
+                      placeholder="YYYY-MM-DD"
+                      value={pendingDateRange.from ? pendingDateRange.from.toISOString().split('T')[0] : ''}
+                      onChange={(e) => {
+                        const value = e.target.value ? new Date(e.target.value) : null;
+                        setPendingDateRange((prev) => ({ ...prev, from: value }));
+                      }}
+                      className="h-9 text-sm sm:text-xs w-full"
+                      autoComplete="off"
+                      inputMode="numeric"
+                    />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-9 w-9">
+                          <CalendarIcon className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="p-0">
+                        <Calendar
+                          mode="single"
+                          selected={pendingDateRange.from ?? undefined}
+                          onSelect={(d) => setPendingDateRange((prev) => ({ ...prev, from: d || null }))}
+                          fromDate={dateBounds.min ?? undefined}
+                          toDate={pendingDateRange.to ?? dateBounds.max ?? undefined}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+                <div className="text-center text-xs text-muted-foreground py-1">to</div>
+                <div className="flex-1 flex flex-col">
+                  <span className="text-[10px] text-muted-foreground sm:hidden mb-1">To</span>
+                  <div className="grid grid-cols-[1fr_auto] gap-1 items-center">
+                    <Input
+                      type="text"
+                      placeholder="YYYY-MM-DD"
+                      value={pendingDateRange.to ? pendingDateRange.to.toISOString().split('T')[0] : ''}
+                      onChange={(e) => {
+                        const value = e.target.value ? new Date(e.target.value) : null;
+                        setPendingDateRange((prev) => ({ ...prev, to: value }));
+                      }}
+                      className="h-9 text-sm sm:text-xs w-full"
+                      autoComplete="off"
+                      inputMode="numeric"
+                    />
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-9 w-9">
+                          <CalendarIcon className="h-4 w-4" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="start" className="p-0">
+                        <Calendar
+                          mode="single"
+                          selected={pendingDateRange.to ?? undefined}
+                          onSelect={(d) => setPendingDateRange((prev) => ({ ...prev, to: d || null }))}
+                          fromDate={pendingDateRange.from ?? dateBounds.min ?? undefined}
+                          toDate={dateBounds.max ?? undefined}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {selectedSegment === 'NSE_EQ'
+                    ? 'NSE_EQ: 01/01/19 to today'
+                    : selectedSegment === 'NSE_FUT' || selectedSegment === 'NSE_OPT'
+                      ? 'NSE_FUT/OPT: 01/01/22 to today'
+                      : 'Select a segment to view available range'}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setFilters((prev) => ({
+                      ...prev,
+                      dateRange: { ...prev.dateRange, ...pendingDateRange },
+                    }));
+                    setQueryOffset(0);
+                  }}
+                >
+                  Apply Dates
+                </Button>
+              </div>
             </div>
             
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Min Volume</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={filters.minVolume || ''}
-                onChange={(e) => setFilters({ ...filters, minVolume: e.target.value ? parseInt(e.target.value) : null })}
-              />
-            </div>
-            
-            <div className="space-y-2">
+            {/* <div className="space-y-2">
               <label className="text-sm font-medium">Items per page</label>
               <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(parseInt(value))}>
                 <SelectTrigger>
@@ -283,7 +701,7 @@ export function HistoricalDataView() {
                   <SelectItem value="200">200</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
+            </div> */}
           </div>
         </CardContent>
       </Card>
@@ -299,20 +717,44 @@ export function HistoricalDataView() {
             <CardHeader>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <CardTitle>
-                  Market Data ({filteredAndSortedData.length} records)
+                  Market Data
                 </CardTitle>
                 <div className="text-sm text-muted-foreground">
-                  Showing {startIndex + 1}-{Math.min(endIndex, filteredAndSortedData.length)} of {filteredAndSortedData.length} records
+                  Showing {showingFrom}-{showingTo} of {totalRecords} records
                 </div>
               </div>
             </CardHeader>
             <CardContent>
+              {isLoadingData && (
+                <p className="mb-2 text-sm text-muted-foreground">Loading historical data...</p>
+              )}
+              {dataError && (
+                <p className="mb-2 text-sm text-destructive">{dataError}</p>
+              )}
               <DataTable>
                 <DataTableHeader>
                   <DataTableRow>
                     <DataTableHead sortable onClick={() => handleSort('symbol')}>Symbol</DataTableHead>
                     <DataTableHead sortable onClick={() => handleSort('segment')}>Segment</DataTableHead>
                     <DataTableHead sortable onClick={() => handleSort('date')}>Date</DataTableHead>
+                    {selectedSegment === 'NSE_FUT' && (
+                      <DataTableHead sortable onClick={() => handleSort('month' as keyof ExtendedHistoricalData)}>
+                        Month
+                      </DataTableHead>
+                    )}
+                    {selectedSegment === 'NSE_OPT' && (
+                      <>
+                        <DataTableHead sortable onClick={() => handleSort('month' as keyof ExtendedHistoricalData)}>
+                          Month
+                        </DataTableHead>
+                        <DataTableHead sortable onClick={() => handleSort('strike' as keyof ExtendedHistoricalData)}>
+                          Strike
+                        </DataTableHead>
+                        <DataTableHead sortable onClick={() => handleSort('expiry' as keyof ExtendedHistoricalData)}>
+                          Expiry
+                        </DataTableHead>
+                      </>
+                    )}
                     <DataTableHead sortable onClick={() => handleSort('price')}>Close</DataTableHead>
                     <DataTableHead sortable onClick={() => handleSort('change')}>Change</DataTableHead>
                     <DataTableHead sortable onClick={() => handleSort('volume')}>Volume</DataTableHead>
@@ -321,61 +763,96 @@ export function HistoricalDataView() {
                   </DataTableRow>
                 </DataTableHeader>
                 <DataTableBody>
-                  {paginatedData.map((item) => (
-                    <DataTableRow key={item.id} className="cursor-pointer" onClick={() => setSelectedSymbol(item.symbol)}>
+                  {!isLoadingData && !dataError && filteredAndSortedData.length === 0 && (
+                    <DataTableRow>
+                      <DataTableCell colSpan={columnCount} className="text-center text-muted-foreground">
+                        No data available.
+                      </DataTableCell>
+                    </DataTableRow>
+                  )}
+                  {filteredAndSortedData.map((item) => (
+                    <DataTableRow
+                      key={item.id}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setSelectedSymbol(item.symbol);
+                        const matched = symbolOptions.find((option) => option.instrumentType === item.symbol);
+                        setSelectedSymbolId(toNumericId(matched?.id));
+                      }}
+                    >
                       <DataTableCell>
-                        <div className="font-medium font-mono">{item.symbol}</div>
+                        <div className="font-medium font-mono">{selectedSymbol || item.symbol}</div>
                       </DataTableCell>
                       <DataTableCell>
                         <Badge variant="secondary">{item.segment}</Badge>
                       </DataTableCell>
-                      <DataTableCell className="font-mono text-sm">{item.date}</DataTableCell>
-                      <DataTableCell className="font-mono">₹{item.price.toFixed(2)}</DataTableCell>
-                      <DataTableCell>
-                        <div className={`flex items-center gap-1 ${item.change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {item.change >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-                          <span className="font-mono">
-                            {item.change >= 0 ? '+' : ''}{item.change.toFixed(2)} ({item.changePercent.toFixed(2)}%)
-                          </span>
-                        </div>
+                      <DataTableCell className="font-mono text-sm">
+                        {formatDate(item.date)}
                       </DataTableCell>
-                      <DataTableCell className="font-mono">{item.volume.toLocaleString()}</DataTableCell>
+                      {selectedSegment === 'NSE_FUT' && (
+                        <DataTableCell className="font-mono text-sm">{displayValue(item.month)}</DataTableCell>
+                      )}
+                      {selectedSegment === 'NSE_OPT' && (
+                        <>
+                          <DataTableCell className="font-mono text-sm">{displayValue(item.month)}</DataTableCell>
+                          <DataTableCell className="font-mono text-sm">{displayValue(item.strike)}</DataTableCell>
+                          <DataTableCell className="font-mono text-sm">{formatDate(item.expiry)}</DataTableCell>
+                        </>
+                      )}
+                      <DataTableCell className="font-mono">{displayNumber(item.price, 2)}</DataTableCell>
+                      <DataTableCell>
+                        {(() => {
+                          const changeValue = Number(item.change);
+                          const isGain = Number.isFinite(changeValue) ? changeValue >= 0 : false;
+                          return (
+                            <div className={`flex items-center gap-1 ${isGain ? 'text-green-600' : 'text-red-600'}`}>
+                              {isGain ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                              <span className="font-mono">
+                                {displayNumber(item.change, 2)} ({displayNumber(item.changePercent, 2)}%)
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </DataTableCell>
+                      <DataTableCell className="font-mono">{displayVolume(item.volume)}</DataTableCell>
                       <DataTableCell>
                         <div className="text-xs font-mono space-y-1">
-                          <div>O: ₹{item.open.toFixed(2)}</div>
-                          <div>H: ₹{item.high.toFixed(2)}</div>
-                          <div>L: ₹{item.low.toFixed(2)}</div>
+                          <div>O: {displayNumber(item.open, 2)}</div>
+                          <div>H: {displayNumber(item.high, 2)}</div>
+                          <div>L: {displayNumber(item.low, 2)}</div>
                         </div>
                       </DataTableCell>
-                      <DataTableCell className="font-mono">₹{(item.turnover / 100000).toFixed(1)}L</DataTableCell>
+                      <DataTableCell className="font-mono">{displayNumber(item.turnover,2)}</DataTableCell>
                     </DataTableRow>
                   ))}
                 </DataTableBody>
               </DataTable>
-              
-              {totalPages > 1 && (
-                <div className="mt-6">
-                  <Pagination>
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious
-                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                          className={`cursor-pointer ${currentPage === 1 ? 'pointer-events-none opacity-50' : ''}`}
-                        />
-                      </PaginationItem>
-                      
-                      {renderPaginationItems()}
-                      
-                      <PaginationItem>
-                        <PaginationNext
-                          onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                          className={`cursor-pointer ${currentPage === totalPages ? 'pointer-events-none opacity-50' : ''}`}
-                        />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
+              <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-sm text-muted-foreground">
+                <div>
+                  Offset {paginationMeta.offset} · Limit {paginationMeta.limit} · Total {totalRecords}
                 </div>
-              )}
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleServerPageChange('prev')}
+                    disabled={isLoadingData || paginationMeta.offset === 0}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleServerPageChange('next')}
+                    disabled={
+                      isLoadingData ||
+                      (!paginationMeta.hasMore && paginationMeta.offset + paginationMeta.limit >= totalRecords)
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -387,12 +864,24 @@ export function HistoricalDataView() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <Select value={selectedSymbol} onValueChange={setSelectedSymbol}>
+                <Select
+                  value={selectedSymbol}
+                  onValueChange={(value) => {
+                    setSelectedSymbol(value);
+                    const matched = symbolOptions.find((option) => option.instrumentType === value);
+                    setSelectedSymbolId(toNumericId(matched?.id));
+                  }}
+                >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a symbol for detailed analysis" />
+                    <SelectValue placeholder={isLoadingSymbols ? "Loading symbols..." : "Select a symbol for detailed analysis"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {uniqueSymbols.map(symbol => (
+                    {isLoadingSymbols && availableSymbols.length === 0 && (
+                      <SelectItem value="loading" disabled>
+                        Loading...
+                      </SelectItem>
+                    )}
+                    {availableSymbols.map(symbol => (
                       <SelectItem key={symbol} value={symbol}>{symbol}</SelectItem>
                     ))}
                   </SelectContent>
@@ -402,34 +891,35 @@ export function HistoricalDataView() {
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {(() => {
                       const symbolData = filteredAndSortedData.filter(d => d.symbol === selectedSymbol);
-                      const avgPrice = symbolData.reduce((sum, d) => sum + d.price, 0) / symbolData.length;
+                      const total = symbolData.length || 1;
+                      const avgPrice = total ? symbolData.reduce((sum, d) => sum + d.price, 0) / total : 0;
                       const totalVolume = symbolData.reduce((sum, d) => sum + d.volume, 0);
-                      const maxPrice = Math.max(...symbolData.map(d => d.price));
-                      const minPrice = Math.min(...symbolData.map(d => d.price));
+                      const maxPrice = symbolData.length ? Math.max(...symbolData.map(d => d.price)) : 0;
+                      const minPrice = symbolData.length ? Math.min(...symbolData.map(d => d.price)) : 0;
                       
                       return (
                         <>
                           <Card>
                             <CardContent className="pt-6">
-                              <div className="text-2xl font-bold font-mono">₹{avgPrice.toFixed(2)}</div>
+                              <div className="text-2xl font-bold font-mono">{displayNumber(avgPrice, 2)}</div>
                               <p className="text-sm text-muted-foreground">Average Price</p>
                             </CardContent>
                           </Card>
                           <Card>
                             <CardContent className="pt-6">
-                              <div className="text-2xl font-bold font-mono">{totalVolume.toLocaleString()}</div>
+                              <div className="text-2xl font-bold font-mono">{displayVolume(totalVolume)}</div>
                               <p className="text-sm text-muted-foreground">Total Volume</p>
                             </CardContent>
                           </Card>
                           <Card>
                             <CardContent className="pt-6">
-                              <div className="text-2xl font-bold font-mono">₹{maxPrice.toFixed(2)}</div>
+                              <div className="text-2xl font-bold font-mono">{displayNumber(maxPrice, 2)}</div>
                               <p className="text-sm text-muted-foreground">Highest Price</p>
                             </CardContent>
                           </Card>
                           <Card>
                             <CardContent className="pt-6">
-                              <div className="text-2xl font-bold font-mono">₹{minPrice.toFixed(2)}</div>
+                              <div className="text-2xl font-bold font-mono">{displayNumber(minPrice, 2)}</div>
                               <p className="text-sm text-muted-foreground">Lowest Price</p>
                             </CardContent>
                           </Card>
