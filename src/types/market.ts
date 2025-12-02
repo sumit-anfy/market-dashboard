@@ -137,6 +137,10 @@ export interface FilterOptions {
   maxPrice: number | null;
   minVolume: number | null;
   maxVolume: number | null;
+  otmMin?: number | null;
+  otmMax?: number | null;
+  premiumMin?: number | null;
+  premiumMax?: number | null;
 }
 
 // Covered Calls Detail Page Types

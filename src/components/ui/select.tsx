@@ -148,6 +148,25 @@ const SelectSeparator = React.forwardRef<
 ));
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
 
+const SelectSearch = ({
+  value,
+  onChange,
+  placeholder = 'Search...',
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) => (
+  <div className="px-2 pb-2">
+    <input
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+    />
+  </div>
+);
+
 export {
   Select,
   SelectGroup,
@@ -159,4 +178,5 @@ export {
   SelectSeparator,
   SelectScrollUpButton,
   SelectScrollDownButton,
+  SelectSearch,
 };

@@ -72,7 +72,7 @@ export function DataTableHead({ children, className, sortable, onClick }: DataTa
   return (
     <th 
       className={cn(
-        "h-12 px-4 text-left align-middle font-medium text-muted-foreground",
+        "h-12 px-4 text-left align-middle font-medium text-muted-foreground items-center",
         sortable && "cursor-pointer hover:text-foreground",
         className
       )}
@@ -91,7 +91,7 @@ interface DataTableCellProps {
 
 export function DataTableCell({ children, className, colSpan }: DataTableCellProps) {
   return (
-    <td className={cn("p-4 align-middle", className)} colSpan={colSpan}>
+    <td className={cn("p-4 align-middle items-center", className)} colSpan={colSpan}>
       {children}
     </td>
   );

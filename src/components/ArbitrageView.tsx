@@ -613,22 +613,22 @@ export function ArbitrageView() {
                         <TableCell className="text-center font-mono text-sm">
                           {row.farFutureVolume ? formatVolume(row.farFutureVolume) : 'N/A'}
                         </TableCell>
-                        <TableCell className={`text-center font-mono text-base ${gapNextNear ? (gapNextNear.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                        <TableCell className={`text-center font-mono calc-highlight text-base ${gapNextNear ? (gapNextNear.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                           {gapNextNear ? `${gapNextNear.gapAmount > 0 ? '+' : ''}${formatPrice(gapNextNear.gapAmount)}` : 'N/A'}
                         </TableCell>
-                        <TableCell className={`text-center font-mono text-base ${gapNextNear ? (gapNextNear.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                        <TableCell className={`text-center font-mono calc-highlight text-base ${gapNextNear ? (gapNextNear.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                           {gapNextNear ? `${gapNextNear.gapPercentage > 0 ? '+' : ''}${gapNextNear.gapPercentage.toFixed(1)}%` : 'N/A'}
                         </TableCell>
-                        <TableCell className={`text-center font-mono text-base ${gapFarNext ? (gapFarNext.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                        <TableCell className={`text-center font-mono calc-highlight text-base ${gapFarNext ? (gapFarNext.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                           {gapFarNext ? `${gapFarNext.gapAmount > 0 ? '+' : ''}${formatPrice(gapFarNext.gapAmount)}` : 'N/A'}
                         </TableCell>
-                        <TableCell className={`text-center font-mono text-base ${gapFarNext ? (gapFarNext.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                        <TableCell className={`text-center font-mono calc-highlight text-base ${gapFarNext ? (gapFarNext.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                           {gapFarNext ? `${gapFarNext.gapPercentage > 0 ? '+' : ''}${gapFarNext.gapPercentage.toFixed(1)}%` : 'N/A'}
                         </TableCell>
-                        <TableCell className={`text-center font-mono text-base ${gapFarNear ? (gapFarNear.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                        <TableCell className={`text-center font-mono calc-highlight text-base ${gapFarNear ? (gapFarNear.gapAmount > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                           {gapFarNear ? `${gapFarNear.gapAmount > 0 ? '+' : ''}${formatPrice(gapFarNear.gapAmount)}` : 'N/A'}
                         </TableCell>
-                        <TableCell className={`text-center font-mono text-base ${gapFarNear ? (gapFarNear.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
+                        <TableCell className={`text-center font-mono calc-highlight text-base ${gapFarNear ? (gapFarNear.gapPercentage > 0 ? 'text-red-600' : 'text-green-600') : 'text-muted-foreground'}`}>
                           {gapFarNear ? `${gapFarNear.gapPercentage > 0 ? '+' : ''}${gapFarNear.gapPercentage.toFixed(1)}%` : 'N/A'}
                         </TableCell>
                       </TableRow>

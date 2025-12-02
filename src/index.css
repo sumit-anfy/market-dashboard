@@ -165,3 +165,8 @@ body {
 .price-neutral {
   @apply text-muted-foreground;
 }
+
+/* Highlight for derived/calculated values */
+.calc-highlight {
+  @apply bg-amber-50 border border-amber-200 rounded-sm px-1.5 py-0.5;
+}

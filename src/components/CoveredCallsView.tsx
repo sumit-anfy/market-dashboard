@@ -803,16 +803,16 @@ export function CoveredCallsView() {
                           <TableCell className="text-center font-mono text-sm">
                             {formatVolume(option.volume)}
                           </TableCell>
-                          <TableCell className="text-center font-mono text-base">
+                          <TableCell className={`text-center font-mono text-base calc-highlight ${option.otm! > 0 ? 'text-red-600' : 'text-green-600'}`}>
                             {option.otm !== null ? option.otm : "N/A"}%
                           </TableCell>
-                          <TableCell className="text-center font-mono text-base">
+                          <TableCell className="text-center font-mono text-base calc-highlight">
                             {option.premiumPercent !== null
                               ? option.premiumPercent
                               : "N/A"}
                             %
                           </TableCell>
-                          <TableCell className="text-center font-mono text-base">
+                          <TableCell className="text-center font-mono text-base calc-highlight">
                             {option.monthlyPercent !== null
                               ? option.monthlyPercent
                               : "N/A"}

@@ -3,8 +3,9 @@ import { Download, Filter, TrendingUp, TrendingDown, Calendar as CalendarIcon } 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSearch } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DataTable, DataTableHeader, DataTableBody, DataTableRow, DataTableHead, DataTableCell } from '@/components/ui/data-table';
 import { HistoricalData, FilterOptions, EquityInstrument } from '@/types/market';
@@ -20,9 +21,14 @@ interface ApiResponse<T> {
 }
 
 type ExtendedHistoricalData = HistoricalData & {
+  equityClose?: number;
   month?: string;
   strike?: string | number;
   expiry?: string;
+  gapPercentage?: number;
+  otmPercentage?: number | null;
+  premiumPercentage?: number | null;
+  type?: string;
 };
 
 export function HistoricalDataView() {
@@ -32,6 +38,7 @@ export function HistoricalDataView() {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('');
   const [selectedSymbolId, setSelectedSymbolId] = useState<number | string | null>(null);
   const [symbolOptions, setSymbolOptions] = useState<EquityInstrument[]>([]);
+  const [symbolSearch, setSymbolSearch] = useState('');
   const [isLoadingSymbols, setIsLoadingSymbols] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [symbolsError, setSymbolsError] = useState<string | null>(null);
@@ -43,6 +50,7 @@ export function HistoricalDataView() {
     hasMore: false,
   });
   const [queryOffset, setQueryOffset] = useState(0);
+  const [optionFilterVersion, setOptionFilterVersion] = useState(0);
   const [pendingDateRange, setPendingDateRange] = useState<{ from: Date | null; to: Date | null }>({
     from: null,
     to: null,
@@ -55,6 +63,10 @@ export function HistoricalDataView() {
     maxPrice: null,
     minVolume: null,
     maxVolume: null,
+    otmMin: -50,
+    otmMax: 50,
+    premiumMin: 0,
+    premiumMax: 25,
   });
 
   const loadSymbolsFromApi = useCallback(async () => {
@@ -142,77 +154,173 @@ export function HistoricalDataView() {
     }
   };
 
+  const buildRequestConfig = (
+    segment: string,
+    symbolObject: { name: string; id: string | number | null },
+    filtersSnapshot: FilterOptions,
+    offset: number,
+    limitOverride?: number
+  ) => {
+    let url = '';
+    const params: Record<string, string | number> = {
+      limit: limitOverride ?? (paginationMeta.limit || 100),
+      offset,
+    };
+    const fromDate = filtersSnapshot.dateRange.from
+      ? filtersSnapshot.dateRange.from.toISOString().split('T')[0]
+      : undefined;
+    const toDate = filtersSnapshot.dateRange.to
+      ? filtersSnapshot.dateRange.to.toISOString().split('T')[0]
+      : undefined;
+    if (fromDate) params.startDate = fromDate;
+    if (toDate) params.endDate = toDate;
+
+    switch (segment) {
+      case 'NSE_EQ':
+        url = '/api/nse-equity';
+        params.symbol = symbolObject.name;
+        break;
+      case 'NSE_FUT':
+        url = '/api/nse-futures';
+        {
+          const underlyingId = Number(symbolObject.id);
+          if (!Number.isFinite(underlyingId)) {
+            throw new Error('Symbol ID is required for NSE_FUT.');
+          }
+          params.underlying = underlyingId;
+        }
+        break;
+      case 'NSE_OPT':
+        url = '/api/nse-options';
+        {
+          const underlyingId = Number(symbolObject.id);
+          if (!Number.isFinite(underlyingId)) {
+            throw new Error('Symbol ID is required for NSE_OPT.');
+          }
+          params.underlying = underlyingId;
+          const otmMin = Number.isFinite(Number(filtersSnapshot.otmMin)) ? Number(filtersSnapshot.otmMin) : undefined;
+          const otmMax = Number.isFinite(Number(filtersSnapshot.otmMax)) ? Number(filtersSnapshot.otmMax) : undefined;
+          const premiumMin = Number.isFinite(Number(filtersSnapshot.premiumMin)) ? Number(filtersSnapshot.premiumMin) : undefined;
+          const premiumMax = Number.isFinite(Number(filtersSnapshot.premiumMax)) ? Number(filtersSnapshot.premiumMax) : undefined;
+          if (otmMin !== undefined) params.minOtm = otmMin;
+          if (otmMax !== undefined) params.maxOtm = otmMax;
+          if (premiumMin !== undefined) params.minPremium = premiumMin;
+          if (premiumMax !== undefined) params.maxPremium = premiumMax;
+        }
+        break;
+      case 'BSE_EQ':
+        url = '/api/bse-equity';
+        params.underlying = symbolObject.name;
+        break;
+      default:
+        throw new Error('Unsupported segment selected.');
+    }
+
+    return { url, params };
+  };
+
+  const mapApiRows = (
+    rows: any[],
+    segment: string,
+    symbolObject: { name: string; id: string | number | null }
+  ): ExtendedHistoricalData[] => {
+    const toNumber = (value: any) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    };
+    const toOptionalNumber = (value: any) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : null;
+    };
+
+    return rows.map((row, index) => {
+      const price =
+        row.price ?? row.close ?? row.ltp ?? row.last_price ?? row.last ?? row.open ?? null;
+      const previousClose =
+        row.previousClose ?? row.prev_close ?? row.previous_close ?? row.close ?? null;
+      const change =
+        row.change ?? row.change_amount ??
+        (price !== null && previousClose !== null
+          ? Number(price) - Number(previousClose)
+          : null);
+      const changePercent =
+        row.changePercent ?? row.change_percent ?? row.change_percentage ??
+        (change !== null && previousClose
+          ? (Number(change) / Number(previousClose)) * 100
+          : null);
+
+      const gap_percentage = row.gap_percentage ?? null;
+      const equity_close = row.equity_close ?? null;
+      const premium_percentage = row.premium_percentage ?? null;
+      const otm_percentage = row.otm_percentage ?? null;
+      const option_type = row.option_type ?? null;
+
+      const expiryValue =
+        row.expiry ??
+        row.expiry_date ??
+        row.expiryDate ??
+        row.expiryDateString ??
+        row.expiry_date_string ??
+        null;
+
+      const expiryDateObj = expiryValue ? new Date(expiryValue) : undefined;
+      const monthValue =
+        row.expiryMonth ??
+        row.expiry_month ??
+        (expiryDateObj ? expiryDateObj.toLocaleString('en-US', { month: 'long' }) : null);
+
+      const equityCloseNumber = toOptionalNumber(equity_close);
+      const strikeNumber = toOptionalNumber(row.strike ?? row.strike_price);
+      const priceNumber = toOptionalNumber(price);
+
+      const derivedOtm =
+        equityCloseNumber !== null && strikeNumber !== null && equityCloseNumber !== 0
+          ? ((strikeNumber - equityCloseNumber) / equityCloseNumber) * 100
+          : null;
+      const derivedPremium =
+        equityCloseNumber !== null && equityCloseNumber !== 0 && priceNumber !== null
+          ? (priceNumber / equityCloseNumber) * 100
+          : null;
+
+      return {
+        id: (row.id ?? `${symbolObject.name}-${index}`).toString(),
+        symbol: row.symbol ?? symbolObject.name ?? '-',
+        segment: row.segment ?? segment,
+        price: toNumber(price),
+        previousClose: toNumber(previousClose),
+        change: toNumber(change),
+        changePercent: toNumber(changePercent),
+        volume: toNumber(row.volume ?? row.total_traded_volume ?? row.totalVolume ?? row.traded_qty),
+        high: toNumber(row.high ?? row.high_price ?? row.day_high),
+        low: toNumber(row.low ?? row.low_price ?? row.day_low),
+        open: toNumber(row.open ?? row.open_price),
+        timestamp: row.timestamp ? new Date(row.timestamp) : row.date ? new Date(row.date) : new Date(),
+        date: row.date ?? row.time ?? row.trade_date ?? row.timestamp ?? '',
+        turnover: toNumber(toNumber(price) * toNumber(row.volume)),
+        month: monthValue ?? undefined,
+        strike: row.strike ?? row.strike_price ?? undefined,
+        expiry: expiryDateObj ? expiryDateObj.toISOString() : undefined,
+        gapPercentage: gap_percentage,
+        equityClose: equityCloseNumber ?? undefined,
+        otmPercentage: otm_percentage ?? derivedOtm,
+        premiumPercentage: premium_percentage ?? derivedPremium,
+        type: option_type,
+      } as ExtendedHistoricalData;
+    });
+  };
+
   const fetchHistoricalData = useCallback(
     async (
       segment: string,
       symbolObject: { name: string; id: string | number | null },
-      offset: number = 0
+      offset: number = 0,
+      filtersSnapshot: FilterOptions = filters
     ) => {
       setIsLoadingData(true);
       setDataError(null);
 
       try {
-        let url = '';
-        const params: Record<string, string | number> = {
-          limit: paginationMeta.limit || 100,
-          offset,
-        };
-        const fromDate = filters.dateRange.from
-          ? filters.dateRange.from.toISOString().split('T')[0]
-          : undefined;
-        const toDate = filters.dateRange.to
-          ? filters.dateRange.to.toISOString().split('T')[0]
-          : undefined;
-        if (fromDate) params.startDate = fromDate;
-        if (toDate) params.endDate = toDate;
-
-        switch (segment) {
-          case 'NSE_EQ':
-            url = '/api/nse-equity';
-            params.symbol = symbolObject.name;
-            break;
-          case 'NSE_FUT':
-            url = '/api/nse-futures';
-            {
-              const underlyingId = Number(symbolObject.id);
-              if (!Number.isFinite(underlyingId)) {
-                setData([]);
-                setDataError('Symbol ID is required for NSE_FUT.');
-                setIsLoadingData(false);
-                return;
-              }
-              params.underlying = underlyingId;
-            }
-            break;
-          case 'NSE_OPT':
-            url = '/api/nse-options';
-            {
-              const underlyingId = Number(symbolObject.id);
-              if (!Number.isFinite(underlyingId)) {
-                setData([]);
-                setDataError('Symbol ID is required for NSE_OPT.');
-                setIsLoadingData(false);
-                return;
-              }
-              params.underlying = underlyingId;
-            }
-            break;
-          case 'BSE_EQ':
-            url = '/api/bse-equity';
-            params.underlying = symbolObject.name;
-            break;
-          default:
-            setData([]);
-            setDataError('Unsupported segment selected.');
-            setIsLoadingData(false);
-            return;
-        }
-
-        if (!url) {
-          setData([]);
-          setIsLoadingData(false);
-          return;
-        }
+        const { url, params } = buildRequestConfig(segment, symbolObject, filtersSnapshot, offset);
 
         const response = await apiClient.get<ApiResponse<any[]>>(url, {
           params,
@@ -227,62 +335,7 @@ export function HistoricalDataView() {
           },
         });
         const rows = response.data?.data || [];
-
-        const toNumber = (value: any) => {
-          const num = Number(value);
-          return Number.isFinite(num) ? num : 0;
-        };
-
-        const mapped: ExtendedHistoricalData[] = rows.map((row, index) => {
-          const price =
-            row.price ?? row.close ?? row.ltp ?? row.last_price ?? row.last ?? row.open ?? null;
-          const previousClose =
-            row.previousClose ?? row.prev_close ?? row.previous_close ?? row.close ?? null;
-          const change =
-            row.change ?? row.change_amount ??
-            (price !== null && previousClose !== null
-              ? Number(price) - Number(previousClose)
-              : null);
-          const changePercent =
-            row.changePercent ?? row.change_percent ?? row.change_percentage ??
-            (change !== null && previousClose
-              ? (Number(change) / Number(previousClose)) * 100
-              : null);
-
-          const expiryValue =
-            row.expiry ??
-            row.expiry_date ??
-            row.expiryDate ??
-            row.expiryDateString ??
-            row.expiry_date_string ??
-            null;
-
-          const expiryDateObj = expiryValue ? new Date(expiryValue) : undefined;
-          const monthValue =
-            row.expiryMonth ??
-            row.expiry_month ??
-            (expiryDateObj ? expiryDateObj.toLocaleString('en-US', { month: 'long' }) : null);
-
-          return {
-            id: (row.id ?? `${symbolObject.name}-${index}`).toString(),
-            symbol: row.symbol ?? symbolObject.name ?? '-',
-            segment: row.segment ?? segment,
-            price: toNumber(price),
-            previousClose: toNumber(previousClose),
-            change: toNumber(change),
-            changePercent: toNumber(changePercent),
-            volume: toNumber(row.volume ?? row.total_traded_volume ?? row.totalVolume ?? row.traded_qty),
-            high: toNumber(row.high ?? row.high_price ?? row.day_high),
-            low: toNumber(row.low ?? row.low_price ?? row.day_low),
-            open: toNumber(row.open ?? row.open_price),
-            timestamp: row.timestamp ? new Date(row.timestamp) : row.date ? new Date(row.date) : new Date(),
-            date: row.date ?? row.time ?? row.trade_date ?? row.timestamp ?? '',
-            turnover: toNumber(toNumber(price) * toNumber(row.volume)),
-            month: monthValue ?? undefined,
-            strike: row.strike ?? row.strike_price ?? undefined,
-            expiry: expiryDateObj ? expiryDateObj.toISOString() : undefined,
-          } as ExtendedHistoricalData;
-        });
+        const mapped: ExtendedHistoricalData[] = mapApiRows(rows, segment, symbolObject);
 
         setData(mapped);
         const pagination = (response.data as any)?.pagination || {};
@@ -357,8 +410,8 @@ export function HistoricalDataView() {
     }
 
     const symbolObject = { name: selectedSymbol, id: selectedSymbolId };
-    fetchHistoricalData(selectedSegment, symbolObject, queryOffset);
-  }, [fetchHistoricalData, selectedSegment, selectedSymbol, selectedSymbolId, queryOffset]);
+    fetchHistoricalData(selectedSegment, symbolObject, queryOffset, filters);
+  }, [fetchHistoricalData, selectedSegment, selectedSymbol, selectedSymbolId, queryOffset, optionFilterVersion]);
 
   const filteredAndSortedData = useMemo(() => {
     let filtered = data.filter(item => {
@@ -386,6 +439,19 @@ export function HistoricalDataView() {
       if (filters.maxPrice !== null && item.price > filters.maxPrice) return false;
       if (filters.minVolume !== null && item.volume < filters.minVolume) return false;
       if (filters.maxVolume !== null && item.volume > filters.maxVolume) return false;
+      if (selectedSegment === 'NSE_OPT') {
+        const otmValue = item.otmPercentage ?? null;
+        const otmMin = filters.otmMin ?? null;
+        const otmMax = filters.otmMax ?? null;
+        if (otmMin !== null && otmValue !== null && otmValue < otmMin) return false;
+        if (otmMax !== null && otmValue !== null && otmValue > otmMax) return false;
+
+        const premiumValue = item.premiumPercentage ?? null;
+        const premiumMin = filters.premiumMin ?? null;
+        const premiumMax = filters.premiumMax ?? null;
+        if (premiumMin !== null && premiumValue !== null && premiumValue < premiumMin) return false;
+        if (premiumMax !== null && premiumValue !== null && premiumValue > premiumMax) return false;
+      }
       return true;
     });
 
@@ -430,80 +496,133 @@ export function HistoricalDataView() {
   const showingTo = filteredAndSortedData.length ? paginationMeta.offset + filteredAndSortedData.length : 0;
   const totalRecords = paginationMeta.total || filteredAndSortedData.length;
   const columnCount = useMemo(() => {
-    let count = 8; // base columns without derivative extras
-    if (selectedSegment === 'NSE_FUT') count += 1;
-    if (selectedSegment === 'NSE_OPT') count += 3;
-    return count;
+    if (selectedSegment === 'NSE_FUT') return 10; // symbol, date, price, month, gap, close, change, volume, OHL, turnover
+    if (selectedSegment === 'NSE_OPT') return 14; // symbol, date, price, month, strike, type, expiry, otm, premium, close, change, volume, OHL, turnover
+    return 7; // symbol, date, close, change, volume, OHL, turnover
   }, [selectedSegment]);
 
-  const exportToCsv = () => {
-    if (!selectedSegment || filteredAndSortedData.length === 0) {
+  const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+  const valuePosition = (value: number, min: number, max: number) =>
+    ((value - min) / (max - min)) * 100;
+
+  const exportToCsv = async () => {
+    if (!selectedSegment || filteredAndSortedData.length === 0 || !selectedSymbol) {
       toast({
         title: 'Nothing to export',
-        description: 'Load data for a segment and apply filters before exporting.',
+        description: 'Select a segment and symbol, then apply filters before exporting.',
         variant: 'destructive',
       });
       return;
     }
 
-    const headers = [
-      'Symbol',
-      'Segment',
-      'Date',
-      ...(selectedSegment === 'NSE_FUT' || selectedSegment === 'NSE_OPT' ? ['Month'] : []),
-      ...(selectedSegment === 'NSE_OPT' ? ['Strike', 'Expiry'] : []),
-      'Open',
-      'High',
-      'Low',
-      'Close',
-      'Volume',
-      'Change%',
-      'Turnover',
-    ];
+    const symbolObject = { name: selectedSymbol, id: selectedSymbolId };
+    const totalRows = paginationMeta.total || filteredAndSortedData.length || data.length;
+    const limitForExport = Math.max(totalRows, paginationMeta.limit || 100);
 
-    const rows = filteredAndSortedData.map((row) => {
-      const cells: (string | number)[] = [
-        displayValue(row.symbol),
-        selectedSegment || displayValue(row.segment),
-        formatDate(row.date),
-      ];
+    try {
+      const { url, params } = buildRequestConfig(
+        selectedSegment,
+        symbolObject,
+        filters,
+        0,
+        limitForExport
+      );
 
-      if (selectedSegment === 'NSE_FUT' || selectedSegment === 'NSE_OPT') {
-        cells.push(displayValue(row.month));
+      const response = await apiClient.get<ApiResponse<any[]>>(url, {
+        params,
+        paramsSerializer: (p) => {
+          const usp = new URLSearchParams();
+          Object.entries(p).forEach(([key, value]) => {
+            if (value === undefined || value === null) return;
+            const num = Number(value);
+            usp.append(key, Number.isFinite(num) ? String(num) : String(value));
+          });
+          return usp.toString();
+        },
+      });
+
+      const mapped = mapApiRows(response.data?.data || [], selectedSegment, symbolObject);
+
+      const headers = ['Symbol', 'Segment', 'Date'];
+
+      if (selectedSegment === 'NSE_FUT') {
+        headers.push('Underlying Close', 'Month', 'Gap%');
       }
 
       if (selectedSegment === 'NSE_OPT') {
-        cells.push(displayValue(row.strike), formatDate(row.expiry));
+        headers.push('Underlying Close', 'Month', 'Strike', 'Option Type', 'Expiry', 'OTM%', 'Premium%');
       }
 
-      cells.push(
-        displayNumber(row.open, 2),
-        displayNumber(row.high, 2),
-        displayNumber(row.low, 2),
-        displayNumber(row.price, 2),
-        displayVolume(row.volume),
-        displayNumber(row.changePercent, 2),
-        displayNumber(row.turnover, 2)
-      );
+      headers.push('Open', 'High', 'Low', 'Close', 'Volume', 'Change%', 'Turnover');
 
-      return cells.map(toCsvValue).join(',');
-    });
+      const rows = mapped.map((row) => {
+        const cells: (string | number)[] = [
+          displayValue(row.symbol),
+          selectedSegment || displayValue(row.segment),
+          formatDate(row.date),
+        ];
 
-    const csvContent = [headers.join(','), ...rows].join('\n');
+        if (selectedSegment === 'NSE_FUT') {
+          cells.push(
+            displayNumber(row.equityClose, 2),
+            displayValue(row.month),
+            displayNumber(row.gapPercentage, 2)
+          );
+        }
 
-    const fileNameParts = [
-      'historical_data',
-      selectedSegment.toLowerCase(),
-      selectedSymbol ? selectedSymbol.replace(/\s+/g, '_') : null,
-    ].filter(Boolean);
+        if (selectedSegment === 'NSE_OPT') {
+          cells.push(
+            displayNumber(row.equityClose, 2),
+            displayValue(row.month),
+            displayValue(row.strike),
+            displayValue(row.type ?? ''),
+            formatDate(row.expiry),
+            displayNumber(row.otmPercentage, 2),
+            displayNumber(row.premiumPercentage, 2)
+          );
+        }
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${fileNameParts.join('_')}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
+        cells.push(
+          displayNumber(row.open, 2),
+          displayNumber(row.high, 2),
+          displayNumber(row.low, 2),
+          displayNumber(row.price, 2),
+          displayVolume(row.volume),
+          displayNumber(row.changePercent, 2),
+          displayNumber(row.turnover, 2)
+        );
+
+        return cells.map(toCsvValue).join(',');
+      });
+
+      const csvContent = [headers.join(','), ...rows].join('\n');
+
+      const fileNameParts = [
+        'historical_data',
+        selectedSegment.toLowerCase(),
+        selectedSymbol ? selectedSymbol.replace(/\s+/g, '_') : null,
+      ].filter(Boolean);
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `${fileNameParts.join('_')}.csv`;
+      a.click();
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error: any) {
+      console.error('CSV export failed', error);
+      toast({
+        title: 'Export failed',
+        description: error?.message || 'Unable to export CSV for the current filters.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Get badge variant based on option type
+  const getOptionTypeBadge = (optionType: string) => {
+    return optionType === "CE" ? "default" : "secondary";
   };
 
   const availableSymbols = useMemo(() => {
@@ -513,6 +632,13 @@ export function HistoricalDataView() {
 
     return Array.from(new Set(data.map((d) => d.symbol))).sort();
   }, [data, symbolOptions]);
+
+  const filteredSymbols = useMemo(() => {
+    if (!symbolSearch) return availableSymbols;
+    return availableSymbols.filter((sym) =>
+      sym.toLowerCase().includes(symbolSearch.toLowerCase())
+    );
+  }, [availableSymbols, symbolSearch]);
 
   return (
     <div className="space-y-6">
@@ -560,13 +686,18 @@ export function HistoricalDataView() {
                   <SelectValue placeholder={isLoadingSymbols ? "Loading symbols..." : "All symbols"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All symbols</SelectItem>
+                  <SelectSearch
+                    value={symbolSearch}
+                    onChange={setSymbolSearch}
+                    placeholder="Search symbols..."
+                  />
+                  <SelectItem value="all">Select symbol</SelectItem>
                   {isLoadingSymbols && availableSymbols.length === 0 && (
                     <SelectItem value="loading" disabled>
                       Loading...
                     </SelectItem>
                   )}
-                  {availableSymbols.map((symbol) => (
+                  {filteredSymbols.map((symbol) => (
                     <SelectItem key={symbol} value={symbol}>
                       {symbol}
                     </SelectItem>
@@ -585,7 +716,7 @@ export function HistoricalDataView() {
                   <SelectValue placeholder="All segments" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All segments</SelectItem>
+                  <SelectItem value="all">Select Segment</SelectItem>
                   <SelectItem value="NSE_EQ">NSE Equity</SelectItem>
                   <SelectItem value="NSE_FUT">NSE Futures</SelectItem>
                   <SelectItem value="NSE_OPT">NSE Options</SelectItem>
@@ -706,6 +837,134 @@ export function HistoricalDataView() {
         </CardContent>
       </Card>
 
+     {selectedSegment === 'NSE_OPT' && ( <Card>
+        <CardHeader>
+          <CardTitle>Options Filters</CardTitle>
+        </CardHeader>
+        <CardContent>          
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">OTM %</label>
+                  <div className="relative w-full px-1 pt-6">
+                    <Slider
+                      min={-100}
+                      max={100}
+                      step={1}
+                      value={[
+                        filters.otmMin ?? -50,
+                        filters.otmMax ?? 50,
+                      ]}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          otmMin: clamp(value[0], -100, value[1]),
+                          otmMax: clamp(value[1], value[0], 100),
+                        }))
+                      }
+                    />
+                    {[{ key: "min", val: filters.otmMin ?? -50 }, { key: "max", val: filters.otmMax ?? 50 }].map((item) => (
+                      <div
+                        key={item.key}
+                        className="absolute -top-3 -translate-x-1/2"
+                        style={{ left: `${valuePosition(item.val, -100, 100)}%` }}
+                      >
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          min={item.key === "min" ? -100 : filters.otmMin ?? -100}
+                          max={item.key === "min" ? filters.otmMax ?? 100 : 100}
+                          value={item.val}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (item.key === "min") {
+                              const next = Number.isFinite(raw) ? clamp(raw, -100, filters.otmMax ?? 100) : filters.otmMin ?? -50;
+                              setFilters((prev) => ({ ...prev, otmMin: next, otmMax: Math.max(next, prev.otmMax ?? next) }));
+                            } else {
+                              const next = Number.isFinite(raw) ? clamp(raw, filters.otmMin ?? -100, 100) : filters.otmMax ?? 50;
+                              setFilters((prev) => ({ ...prev, otmMax: next, otmMin: Math.min(prev.otmMin ?? next, next) }));
+                            }
+                          }}
+                          className="h-7 w-14 text-xs text-center font-medium"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-xs text-muted-foreground mt-3">
+                      <span>-100%</span>
+                      <span>0%</span>
+                      <span>100%</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Premium %</label>
+                  <div className="relative w-full px-1 pt-6">
+                    <Slider
+                      min={0}
+                      max={50}
+                      step={0.5}
+                      value={[
+                        filters.premiumMin ?? 0,
+                        filters.premiumMax ?? 25,
+                      ]}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          premiumMin: clamp(value[0], 0, value[1]),
+                          premiumMax: clamp(value[1], value[0], 50),
+                        }))
+                      }
+                    />
+                    {[{ key: "min", val: filters.premiumMin ?? 0 }, { key: "max", val: filters.premiumMax ?? 25 }].map((item) => (
+                      <div
+                        key={item.key}
+                        className="absolute -top-3 -translate-x-1/2"
+                        style={{ left: `${valuePosition(item.val, 0, 50)}%` }}
+                      >
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          min={item.key === "min" ? 0 : filters.premiumMin ?? 0}
+                          max={item.key === "min" ? filters.premiumMax ?? 50 : 50}
+                          step="0.5"
+                          value={item.val}
+                          onChange={(e) => {
+                            const raw = Number(e.target.value);
+                            if (item.key === "min") {
+                              const next = Number.isFinite(raw) ? clamp(raw, 0, filters.premiumMax ?? 50) : filters.premiumMin ?? 0;
+                              setFilters((prev) => ({ ...prev, premiumMin: next, premiumMax: Math.max(next, prev.premiumMax ?? next) }));
+                            } else {
+                              const next = Number.isFinite(raw) ? clamp(raw, filters.premiumMin ?? 0, 50) : filters.premiumMax ?? 25;
+                              setFilters((prev) => ({ ...prev, premiumMax: next, premiumMin: Math.min(prev.premiumMin ?? next, next) }));
+                            }
+                          }}
+                          className="h-7 w-14 text-xs text-center font-medium"
+                        />
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-xs text-muted-foreground mt-3">
+                      <span>0%</span>
+                      <span>25%</span>
+                      <span>50%</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setQueryOffset(0);
+                    setOptionFilterVersion((prev) => prev + 1);
+                  }}
+                >
+                  Apply Option Filters
+                </Button>
+              </div>
+        </CardContent>
+      </Card>)}
+
       <Tabs defaultValue="table" className="w-full">
         <TabsList>
           <TabsTrigger value="table">Data Table</TabsTrigger>
@@ -735,20 +994,31 @@ export function HistoricalDataView() {
                 <DataTableHeader>
                   <DataTableRow>
                     <DataTableHead sortable onClick={() => handleSort('symbol')}>Symbol</DataTableHead>
-                    <DataTableHead sortable onClick={() => handleSort('segment')}>Segment</DataTableHead>
+                    {/* <DataTableHead sortable onClick={() => handleSort('segment')}>Segment</DataTableHead> */}
                     <DataTableHead sortable onClick={() => handleSort('date')}>Date</DataTableHead>
                     {selectedSegment === 'NSE_FUT' && (
-                      <DataTableHead sortable onClick={() => handleSort('month' as keyof ExtendedHistoricalData)}>
-                        Month
-                      </DataTableHead>
+                      <>
+                        <DataTableHead sortable onClick={() => handleSort('price' as keyof ExtendedHistoricalData)}>
+                          Price
+                        </DataTableHead>
+                        <DataTableHead sortable onClick={() => handleSort('month' as keyof ExtendedHistoricalData)}>
+                          Month
+                        </DataTableHead>
+                      </>
                     )}
                     {selectedSegment === 'NSE_OPT' && (
                       <>
+                        <DataTableHead sortable onClick={() => handleSort('price' as keyof ExtendedHistoricalData)}>
+                          Price
+                        </DataTableHead>
                         <DataTableHead sortable onClick={() => handleSort('month' as keyof ExtendedHistoricalData)}>
                           Month
                         </DataTableHead>
                         <DataTableHead sortable onClick={() => handleSort('strike' as keyof ExtendedHistoricalData)}>
                           Strike
+                        </DataTableHead>
+                        <DataTableHead sortable onClick={() => handleSort('type' as keyof ExtendedHistoricalData)}>
+                          Option Type
                         </DataTableHead>
                         <DataTableHead sortable onClick={() => handleSort('expiry' as keyof ExtendedHistoricalData)}>
                           Expiry
@@ -756,9 +1026,26 @@ export function HistoricalDataView() {
                       </>
                     )}
                     <DataTableHead sortable onClick={() => handleSort('price')}>Close</DataTableHead>
+                    {selectedSegment === 'NSE_FUT' && (
+                      <>
+                        <DataTableHead sortable onClick={() => handleSort('gapPercentage' as keyof ExtendedHistoricalData)}>
+                          Gap%
+                        </DataTableHead>
+                      </>
+                    )}
+                    {selectedSegment === 'NSE_OPT' && (
+                      <>
+                        <DataTableHead sortable onClick={() => handleSort('otmPercentage' as keyof ExtendedHistoricalData)}>
+                          OTM%
+                        </DataTableHead>
+                        <DataTableHead sortable onClick={() => handleSort('premiumPercentage' as keyof ExtendedHistoricalData)}>
+                          Premium%
+                        </DataTableHead>
+                      </>
+                    )}
                     <DataTableHead sortable onClick={() => handleSort('change')}>Change</DataTableHead>
                     <DataTableHead sortable onClick={() => handleSort('volume')}>Volume</DataTableHead>
-                    <DataTableHead>OHLC</DataTableHead>
+                    <DataTableHead>OHL</DataTableHead>
                     <DataTableHead sortable onClick={() => handleSort('turnover')}>Turnover</DataTableHead>
                   </DataTableRow>
                 </DataTableHeader>
@@ -783,29 +1070,49 @@ export function HistoricalDataView() {
                       <DataTableCell>
                         <div className="font-medium font-mono">{selectedSymbol || item.symbol}</div>
                       </DataTableCell>
-                      <DataTableCell>
+                      {/* <DataTableCell>
                         <Badge variant="secondary">{item.segment}</Badge>
-                      </DataTableCell>
+                      </DataTableCell> */}
                       <DataTableCell className="font-mono text-sm">
                         {formatDate(item.date)}
                       </DataTableCell>
                       {selectedSegment === 'NSE_FUT' && (
-                        <DataTableCell className="font-mono text-sm">{displayValue(item.month)}</DataTableCell>
+                        <>
+                          <DataTableCell className="font-mono text-sm">{displayNumber(item.equityClose, 2)}</DataTableCell>
+                          <DataTableCell className="font-mono text-sm">{displayValue(item.month)}</DataTableCell>
+                        </>
                       )}
                       {selectedSegment === 'NSE_OPT' && (
                         <>
+                          <DataTableCell className="font-mono text-sm">{displayNumber(item.equityClose, 2)}</DataTableCell>
                           <DataTableCell className="font-mono text-sm">{displayValue(item.month)}</DataTableCell>
                           <DataTableCell className="font-mono text-sm">{displayValue(item.strike)}</DataTableCell>
+                          <DataTableCell>
+                            <Badge variant={getOptionTypeBadge(item.type || '')}>
+                              {item.type || '-'}
+                            </Badge>
+                          </DataTableCell>
                           <DataTableCell className="font-mono text-sm">{formatDate(item.expiry)}</DataTableCell>
                         </>
                       )}
                       <DataTableCell className="font-mono">{displayNumber(item.price, 2)}</DataTableCell>
-                      <DataTableCell>
+                      {selectedSegment === 'NSE_FUT' && (
+                        <>
+                          <DataTableCell className="font-mono text-sm calc-highlight">{displayNumber(item.gapPercentage, 2)}%</DataTableCell>
+                        </>
+                      )}
+                      {selectedSegment === 'NSE_OPT' && (
+                        <>
+                          <DataTableCell className="font-mono text-sm calc-highlight">{displayNumber(item.otmPercentage, 2)}%</DataTableCell>
+                          <DataTableCell className="font-mono text-sm calc-highlight">{displayNumber(item.premiumPercentage, 2)}%</DataTableCell>
+                        </>
+                      )}
+                      <DataTableCell className="calc-highlight">
                         {(() => {
                           const changeValue = Number(item.change);
                           const isGain = Number.isFinite(changeValue) ? changeValue >= 0 : false;
                           return (
-                            <div className={`flex items-center gap-1 ${isGain ? 'text-green-600' : 'text-red-600'}`}>
+                            <div className={`flex items-center  gap-1 ${isGain ? 'text-green-600' : 'text-red-600'}`}>
                               {isGain ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                               <span className="font-mono">
                                 {displayNumber(item.change, 2)} ({displayNumber(item.changePercent, 2)}%)
