@@ -18,6 +18,7 @@ import { SelectedArbitrageTable } from "@/components/arbitrage-details/SelectedA
 import { ArbitrageFilters } from "@/components/arbitrage-details/ArbitrageFilters";
 import { ArbitrageSummaryCards } from "@/components/arbitrage-details/ArbitrageSummaryCards";
 import { ArbitrageHistoryTable } from "@/components/arbitrage-details/ArbitrageHistoryTable";
+import { GapTrendGraph } from "@/components/arbitrage-details/GapTrendGraph";
 
 type FiltersState = {
   gapFilter: "both" | "positive" | "negative";
@@ -635,6 +636,9 @@ export default function ArbitrageDetailsPage() {
 
           {/* Summary Cards */}
           <ArbitrageSummaryCards summary={summary} />
+
+          {/* Gap Trend Graph */}
+          <GapTrendGraph data={sortedFilteredData} timeRange={timeRange} />
 
           {/* Data Table */}
           <ArbitrageHistoryTable

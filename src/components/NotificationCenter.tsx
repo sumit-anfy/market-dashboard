@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Bell, CheckCheck, History } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useGapAlerts } from "@/hooks/useGapAlerts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -19,10 +20,47 @@ function formatTime(value?: string | Date) {
 
 export function NotificationCenter() {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
   const { history, unreadCount, markAllRead, markAlertRead, clearHistory } =
     useGapAlerts({ maxVisible: 4, autoDismissMs: 8000 });
 
   const hasNotifications = history.length > 0;
+
+  const handleNotificationClick = (alert: any) => {
+    markAlertRead(alert.id);
+    setOpen(false);
+
+    // Construct date string (YYYY-MM-DD) from alert timestamp
+    const dateObj = new Date(alert.triggeredAt ?? alert.receivedAt);
+    const dateStr = dateObj.toISOString().split('T')[0];
+
+    // Navigate to details page
+    // We pass minimal state, the page will fetch the rest
+    // Note: The page expects some state to render initially, so we might need to pass dummy data
+    // or update the page to handle missing state gracefully.
+    // Based on previous analysis, the page requires state or query params.
+    // Let's pass query params as that's more robust for deep linking.
+
+    const params = new URLSearchParams({
+      instrumentid: alert.instrumentId.toString(),
+      name: alert.instrumentName,
+      date: dateObj.toISOString(), // Full ISO string for precision
+      // We don't have all the price details here, but the page logic 
+      // seems to require them to not return "No data available".
+      // However, the page also fetches data based on filters.
+      // Let's try passing what we have.
+      symbol_1: "", // Dummy
+      price_1: "0",
+      symbol_2: "",
+      price_2: "0",
+      symbol_3: "",
+      price_3: "0",
+      gap_1: "0",
+      gap_2: "0"
+    });
+
+    navigate(`/arbitrage/${alert.instrumentId}/${dateStr}?${params.toString()}`);
+  };
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -74,7 +112,7 @@ export function NotificationCenter() {
               {history.map((alert) => (
                 <button
                   key={alert.id}
-                  onClick={() => markAlertRead(alert.id)}
+                  onClick={() => handleNotificationClick(alert)}
                   className={cn(
                     "flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-muted/60",
                     !alert.read && "bg-muted/40"

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, Clock, TrendingUp, Menu, X, ArrowLeftRight, Shield, LogOut } from 'lucide-react';
+import { BarChart3, Clock, TrendingUp, Menu, X, ArrowLeftRight, Shield, LogOut, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { NotificationCenter } from './NotificationCenter';
@@ -8,7 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 interface LayoutProps {
   children: React.ReactNode;
   currentView: string;
-  onViewChange: (view: 'historical' | 'live' | 'arbitrage' | 'covered-calls') => void;
+  onViewChange: (view: 'historical' | 'live' | 'arbitrage' | 'covered-calls' | 'arbitrage-history') => void;
 }
 
 export function Layout({ children, currentView, onViewChange }: LayoutProps) {
@@ -24,7 +24,7 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
               <TrendingUp className="h-8 w-8 text-primary" />
               <h1 className="text-xl font-bold">Market Data Platform</h1>
             </div>
-            
+
             <div className="flex items-center gap-2">
               {/* Desktop Navigation */}
               <nav className="hidden md:flex items-center space-x-1">
@@ -45,12 +45,20 @@ export function Layout({ children, currentView, onViewChange }: LayoutProps) {
                   Live Data
                 </Button>
                 <Button
-                  variant={currentView === 'arbitrage' || currentView === 'live-watch'? 'default' : 'ghost'}
+                  variant={currentView === 'arbitrage' || currentView === 'live-watch' ? 'default' : 'ghost'}
                   onClick={() => onViewChange('arbitrage')}
                   className="flex items-center gap-2"
                 >
                   <ArrowLeftRight className="h-4 w-4" />
                   Arbitrage
+                </Button>
+                <Button
+                  variant={currentView === 'arbitrage-history' ? 'default' : 'ghost'}
+                  onClick={() => onViewChange('arbitrage-history')}
+                  className="flex items-center gap-2"
+                >
+                  <History className="h-4 w-4" />
+                  History
                 </Button>
                 <Button
                   variant={currentView === 'covered-calls' ? 'default' : 'ghost'}
