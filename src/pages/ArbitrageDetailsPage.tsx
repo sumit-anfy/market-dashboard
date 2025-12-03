@@ -60,6 +60,8 @@ interface TableSortConfig {
   direction: SortDirection;
 }
 
+const DEFAULT_GAP_RANGE: [number, number] = [-1000, 1000];
+
 export default function ArbitrageDetailsPage() {
   const { instrumentId } = useParams<{ instrumentId: string; date: string }>();
   const location = useLocation();
@@ -114,7 +116,9 @@ export default function ArbitrageDetailsPage() {
   const [gapFilter, setGapFilter] = useState<"both" | "positive" | "negative">(
     "both"
   );
-  const [gapRange, setGapRange] = useState<[number, number]>([-50, 50]);
+  const [gapRange, setGapRange] =
+    useState<[number, number]>(DEFAULT_GAP_RANGE);
+  const [isGapFilterActive, setIsGapFilterActive] = useState(false);
   // Live data state is now managed by MultiSymbolLiveData component
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(360);
@@ -153,7 +157,7 @@ export default function ArbitrageDetailsPage() {
   // Applied filters (used for API calls)
   const [appliedFilters, setAppliedFilters] = useState<FiltersState>({
     gapFilter,
-    gapRange,
+    gapRange: DEFAULT_GAP_RANGE,
     startDate: "",
     endDate: "",
   });
@@ -234,6 +238,8 @@ export default function ArbitrageDetailsPage() {
   //       year: "2-digit",  // 2-digit year → dd/mm/yy
   //     }) : "-")
 
+  const gapRangeToApply = isGapFilterActive ? appliedFilters.gapRange : undefined;
+
   // Fetch filtered arbitrage data
   const {
     data: filteredData,
@@ -247,8 +253,8 @@ export default function ArbitrageDetailsPage() {
     page: currentPage,
     limit: itemsPerPage,
     gapFilter: appliedFilters.gapFilter,
-    minGap: appliedFilters.gapRange[0],
-    maxGap: appliedFilters.gapRange[1],
+    minGap: gapRangeToApply?.[0],
+    maxGap: gapRangeToApply?.[1],
     startDate: appliedDateRange.startDate,
     endDate: appliedDateRange.endDate,
   });
@@ -549,20 +555,22 @@ export default function ArbitrageDetailsPage() {
       startDate: selectedStartDate || "",
       endDate: selectedEndDate || "",
     });
+    setIsGapFilterActive(true);
     setCurrentPage(1);
   };
 
   const handleResetFilters = () => {
     setGapFilter("both");
-    setGapRange([-50, 50]);
+    setGapRange(DEFAULT_GAP_RANGE);
     setSelectedStartDate("");
     setSelectedEndDate("");
     setAppliedFilters({
       gapFilter: "both",
-      gapRange: [-50, 50],
+      gapRange: DEFAULT_GAP_RANGE,
       startDate: "",
       endDate: "",
     });
+    setIsGapFilterActive(false);
     setCurrentPage(1);
   };
 
