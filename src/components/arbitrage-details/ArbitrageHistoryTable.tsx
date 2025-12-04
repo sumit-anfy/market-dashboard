@@ -60,16 +60,37 @@ export function ArbitrageHistoryTable({
         const t2 = row.time_2 as string | null | undefined;
         const t3 = row.time_3 as string | null | undefined;
 
+        // Use pre-calculated differences from backend if available
+        const diff12 = row.diff_12 !== undefined ? Number(row.diff_12) : null;
+        const diff23 = row.diff_23 !== undefined ? Number(row.diff_23) : null;
+
         const isValid = (t?: string | null) => !!t && t.trim().length > 0;
 
-        const match1 =
-            isValid(t1) && ((isValid(t2) && t1 === t2) || (isValid(t3) && t1 === t3));
-        const match2 =
-            isValid(t2) && ((isValid(t1) && t2 === t1) || (isValid(t3) && t2 === t3));
-        const match3 =
-            isValid(t3) && ((isValid(t1) && t3 === t1) || (isValid(t2) && t3 === t2));
+        // Exact match logic
+        const exactMatch1 = isValid(t1) && ((isValid(t2) && t1 === t2) || (isValid(t3) && t1 === t3));
+        const exactMatch2 = isValid(t2) && ((isValid(t1) && t2 === t1) || (isValid(t3) && t2 === t3));
+        const exactMatch3 = isValid(t3) && ((isValid(t1) && t3 === t1) || (isValid(t2) && t3 === t2));
 
-        return { match1, match2, match3 };
+        // Within 15 seconds logic (Sync)
+        const isNearNextSync = diff12 !== null && diff12 <= 15;
+        const isNextFarSync = diff23 !== null && diff23 <= 15;
+
+        // Determine final status for each symbol
+        // Status: 'exact' (Blue) | 'sync' (Red) | 'none' (Default)
+
+        let status1 = 'none';
+        if (exactMatch1) status1 = 'exact';
+        else if (isNearNextSync) status1 = 'sync';
+
+        let status2 = 'none';
+        if (exactMatch2) status2 = 'exact';
+        else if (isNearNextSync || isNextFarSync) status2 = 'sync';
+
+        let status3 = 'none';
+        if (exactMatch3) status3 = 'exact';
+        else if (isNextFarSync) status3 = 'sync';
+
+        return { status1, status2, status3 };
     };
 
     return (
@@ -197,13 +218,20 @@ export function ArbitrageHistoryTable({
                             </TableRow>
                         ) : sortedFilteredData && sortedFilteredData.length > 0 ? (
                             sortedFilteredData.map((row: any, idx: number) => {
-                                const { match1, match2, match3 } =
+                                const { status1, status2, status3 } =
                                     timeRange === "hour"
                                         ? getTimeMatchFlags(row)
-                                        : { match1: false, match2: false, match3: false };
+                                        : { status1: 'none', status2: 'none', status3: 'none' };
 
-                                const symbolBaseClass = "text-center font-medium";
-                                const symbolBlueClass = "text-blue-800 font-bold";
+                                const symbolBaseClass = "text-center font-medium text-red-300";
+                                const exactMatchClass = "text-blue-800 font-bold rounded px-2";
+                                const syncMatchClass = "font-bold text-black-600";
+
+                                const getSymbolClass = (status: string) => {
+                                    if (status === 'exact') return `${symbolBaseClass} ${exactMatchClass}`;
+                                    if (status === 'sync') return `${symbolBaseClass} ${syncMatchClass}`;
+                                    return symbolBaseClass;
+                                };
 
                                 return (
                                     <TableRow key={idx} className={getRowColor(row.date || "-")}>
@@ -216,10 +244,7 @@ export function ArbitrageHistoryTable({
                                                 row.date.split(" ")[2]
                                                 : formatDateOnly(row.date)}
                                         </TableCell>
-                                        <TableCell
-                                            className={`${symbolBaseClass} ${match1 ? symbolBlueClass : ""
-                                                }`}
-                                        >
+                                        <TableCell className={getSymbolClass(status1)}>
                                             {row.symbol_1 || "-"}
                                         </TableCell>
                                         {timeRange == "hour" && (
@@ -230,10 +255,7 @@ export function ArbitrageHistoryTable({
                                         <TableCell className="text-center">
                                             {formatNumber(row.price_1)}
                                         </TableCell>
-                                        <TableCell
-                                            className={`${symbolBaseClass} ${match2 ? symbolBlueClass : ""
-                                                }`}
-                                        >
+                                        <TableCell className={getSymbolClass(status2)}>
                                             {row.symbol_2 || "-"}
                                         </TableCell>
                                         {timeRange == "hour" && (
@@ -244,10 +266,7 @@ export function ArbitrageHistoryTable({
                                         <TableCell className="text-center">
                                             {formatNumber(row.price_2)}
                                         </TableCell>
-                                        <TableCell
-                                            className={`${symbolBaseClass} ${match3 ? symbolBlueClass : ""
-                                                }`}
-                                        >
+                                        <TableCell className={getSymbolClass(status3)}>
                                             {row.symbol_3 || "-"}
                                         </TableCell>
                                         {timeRange == "hour" && (
