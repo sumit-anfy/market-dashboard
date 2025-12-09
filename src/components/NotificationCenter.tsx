@@ -5,7 +5,6 @@ import { useGapAlerts } from "@/hooks/useGapAlerts";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 function formatTime(value?: string | Date) {
@@ -102,7 +101,7 @@ export function NotificationCenter() {
           </div>
         </div>
 
-        <ScrollArea className="max-h-[360px]">
+        <div className="max-h-[360px] overflow-y-auto">
           {!hasNotifications ? (
             <div className="px-4 py-10 text-center text-sm text-muted-foreground">
               No notifications yet. Live socket events will show up here.
@@ -149,7 +148,7 @@ export function NotificationCenter() {
               ))}
             </div>
           )}
-        </ScrollArea>
+        </div>
 
         <div className="flex items-center justify-between border-t px-4 py-2 text-[11px] text-muted-foreground">
           <span>

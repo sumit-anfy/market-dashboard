@@ -599,16 +599,18 @@ export default function ArbitrageDetailsPage() {
       <ArbitrageHeader name={state.name} date={state.date} />
 
       {/* Date Range Summary */}
-      <ArbitrageDateRangeSummary
-        equityRange={equityRange}
-        futuresRange={futuresRange}
-      />
+      {state.symbol_1 && (
+        <ArbitrageDateRangeSummary
+          equityRange={equityRange}
+          futuresRange={futuresRange}
+        />
+      )}
 
       {/* Section 1: Selected Row Data */}
-      <SelectedArbitrageTable data={state} />
+      {state.symbol_1 && <SelectedArbitrageTable data={state} />}
 
       {/* Section 2: Enhanced Multi-Symbol Live Data */}
-      <MultiSymbolLiveData symbols={symbols} isMarketOpen={isMarketOpen} />
+      {state.symbol_1 && <MultiSymbolLiveData symbols={symbols} isMarketOpen={isMarketOpen} />}
 
       {/* Section 3: Filtered Query Data */}
       <Card>
