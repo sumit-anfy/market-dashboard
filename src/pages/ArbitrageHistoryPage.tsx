@@ -141,7 +141,7 @@ export default function ArbitrageHistoryPage() {
                 </div>
                 <div className="flex items-center gap-2">
                     <Button
-                        onClick={fetchHistory}
+                        onClick={() => fetchHistory()}
                         disabled={loading || !selectedInstrumentId}
                         variant="outline"
                     >
@@ -200,7 +200,7 @@ export default function ArbitrageHistoryPage() {
                             />
                         </div>
                         <div className="flex items-end">
-                            <Button onClick={fetchHistory} disabled={loading || !selectedInstrumentId}>Apply Filters</Button>
+                            <Button onClick={() => fetchHistory()} disabled={loading || !selectedInstrumentId}>Apply Filters</Button>
                         </div>
                     </div>
                 </CardContent>
