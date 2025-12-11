@@ -58,7 +58,7 @@ export function ArbitrageView() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [equityRange, setEquityRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null }>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
-  const [futuresRange, setFuturesRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null}>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
+  const [futuresRange, setFuturesRange] = useState<{ min_date: string | null; max_date: string | null; hourly_min_date: string | null; hourly_max_date: string | null }>({ min_date: null, max_date: null, hourly_min_date: null, hourly_max_date: null });
 
   // Fetch arbitrage data from API
   const fetchArbitrageData = async () => {
@@ -95,20 +95,49 @@ export function ArbitrageView() {
 
   // Fetch data on component mount
   useEffect(() => {
-    fetchArbitrageData();
+    const controller = new AbortController();
+
+    // Fetch Arbitrage Data
+    const loadArbitrage = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await apiClient.get(`${import.meta.env.VITE_API_BASE_URL}/api/arbitrage`, {
+          signal: controller.signal
+        });
+
+        if (response.data.success) {
+          setArbitrageData(response.data.data);
+        } else {
+          throw new Error(response.data.error || 'Failed to fetch arbitrage data');
+        }
+      } catch (err: any) {
+        if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
+
+        setError(err?.message || 'An error occurred');
+        console.error('Error fetching arbitrage data:', err);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    };
+
     const fetchDateRanges = async () => {
       try {
         const [eq, fut] = await Promise.all([
-          apiClient.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, { params: { symbol: 'null' } }),
-          apiClient.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, { params: { instrumentId: 'null' } }),
+          apiClient.get(`${config.apiBaseUrl}/api/nse-equity/date-range`, { params: { symbol: 'null' }, signal: controller.signal }),
+          apiClient.get(`${config.apiBaseUrl}/api/nse-futures/date-range`, { params: { instrumentId: 'null' }, signal: controller.signal }),
         ]);
         setEquityRange({ min_date: eq.data?.min_date ?? null, max_date: eq.data?.max_date ?? null, hourly_min_date: eq.data?.hourly_min_date ?? null, hourly_max_date: eq.data?.hourly_max_date ?? null });
         setFuturesRange({ min_date: fut.data?.min_date ?? null, max_date: fut.data?.max_date ?? null, hourly_min_date: fut.data?.hourly_min_date ?? null, hourly_max_date: fut.data?.hourly_max_date ?? null });
-      } catch (e) {
-        // ignore for view
+      } catch (e: any) {
+        // ignore
       }
     };
+
+    loadArbitrage();
     fetchDateRanges();
+
+    return () => controller.abort();
   }, []);
 
   // Format price based on value - no decimals if >= 50, one decimal if < 50
@@ -149,21 +178,21 @@ export function ArbitrageView() {
     if (hasNextNearGap) {
       const gapNextNear = calculateGap(row.nextFuturePrice!, row.nearFuturePrice!, row.underlyingPrice);
       passesNextNearFilter = gapNextNear.gapPercentage >= filters.nextNearMin &&
-                             gapNextNear.gapPercentage <= filters.nextNearMax;
+        gapNextNear.gapPercentage <= filters.nextNearMax;
     }
 
     // Check Far/Next gap filter only if both prices exist
     if (hasFarNextGap) {
       const gapFarNext = calculateGap(row.farFuturePrice!, row.nextFuturePrice!, row.underlyingPrice);
       passesFarNextFilter = gapFarNext.gapPercentage >= filters.farNextMin &&
-                            gapFarNext.gapPercentage <= filters.farNextMax;
+        gapFarNext.gapPercentage <= filters.farNextMax;
     }
 
     // Check Far/Near gap filter only if both prices exist
     if (hasFarNearGap) {
       const gapFarNear = calculateGap(row.farFuturePrice!, row.nearFuturePrice!, row.underlyingPrice);
       passesFarNearFilter = gapFarNear.gapPercentage >= filters.farNearMin &&
-                            gapFarNear.gapPercentage <= filters.farNearMax;
+        gapFarNear.gapPercentage <= filters.farNearMax;
     }
 
     return passesNextNearFilter && passesFarNextFilter && passesFarNearFilter;
@@ -180,11 +209,11 @@ export function ArbitrageView() {
     setCurrentPage(1);
   }, [filters, rowsPerPage]);
 
-  const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB",{
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",  // 2-digit year → dd/mm/yy
-      }) : "-")
+  const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",  // 2-digit year → dd/mm/yy
+  }) : "-")
 
   // Handle row click to navigate to details page in a new tab
   const handleRowClick = (row: ArbitrageData) => {
@@ -287,15 +316,15 @@ export function ArbitrageView() {
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Equity Date Range (Hourly)</CardTitle>
-            <CardTitle>From: <span className='font-medium'>{equityRange.hourly_min_date && formatDateOnly(equityRange.hourly_min_date)+" "+equityRange.hourly_min_date.split(" ")[1]+" "+equityRange.hourly_min_date.split(" ")[2]}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium'>{equityRange.hourly_max_date && formatDateOnly(equityRange.hourly_max_date)+" "+equityRange.hourly_max_date.split(" ")[1]+" "+equityRange.hourly_max_date.split(" ")[2]}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium'>{equityRange.hourly_min_date && formatDateOnly(equityRange.hourly_min_date) + " " + equityRange.hourly_min_date.split(" ")[1] + " " + equityRange.hourly_min_date.split(" ")[2]}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium'>{equityRange.hourly_max_date && formatDateOnly(equityRange.hourly_max_date) + " " + equityRange.hourly_max_date.split(" ")[1] + " " + equityRange.hourly_max_date.split(" ")[2]}</span></CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className='grid grid-cols-3 text-center'>
             <CardTitle className='text-base'>Futures Date Range (Hourly)</CardTitle>
-            <CardTitle>From: <span className='font-medium text-foreground'>{futuresRange.hourly_min_date && formatDateOnly(futuresRange.hourly_min_date)+" "+futuresRange.hourly_min_date.split(" ")[1]+" "+futuresRange.hourly_min_date.split(" ")[2]}</span></CardTitle>
-            <CardTitle>Last: <span className='font-medium text-foreground'>{futuresRange.hourly_max_date && formatDateOnly(futuresRange.hourly_max_date)+" "+futuresRange.hourly_max_date.split(" ")[1]+" "+futuresRange.hourly_max_date.split(" ")[2]}</span></CardTitle>
+            <CardTitle>From: <span className='font-medium text-foreground'>{futuresRange.hourly_min_date && formatDateOnly(futuresRange.hourly_min_date) + " " + futuresRange.hourly_min_date.split(" ")[1] + " " + futuresRange.hourly_min_date.split(" ")[2]}</span></CardTitle>
+            <CardTitle>Last: <span className='font-medium text-foreground'>{futuresRange.hourly_max_date && formatDateOnly(futuresRange.hourly_max_date) + " " + futuresRange.hourly_max_date.split(" ")[1] + " " + futuresRange.hourly_max_date.split(" ")[2]}</span></CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -570,7 +599,7 @@ export function ArbitrageView() {
                       >
                         <TableCell className="text-center font-medium">
                           <div className="flex items-center justify-center flex-col">
-                            <div>{row.underlyingSymbol}</div><div className='text-xs'>({row.time.split(" ")[1]+row.time.split(" ")[2]})</div>
+                            <div>{row.underlyingSymbol}</div><div className='text-xs'>({row.time.split(" ")[1] + row.time.split(" ")[2]})</div>
                             {/* <Activity className="h-4 w-4 text-blue-500 opacity-0 group-hover:opacity-100 transition-opacity" /> */}
                           </div>
                         </TableCell>

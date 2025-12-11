@@ -102,7 +102,7 @@ export function CoveredCallsView() {
 
   // Fetch covered calls data from API with pagination and filters
   const fetchCoveredCallsData = useCallback(
-    async (page: number = 1, filtersForApi: FiltersState = appliedFilters) => {
+    async (page: number = 1, filtersForApi: FiltersState = appliedFilters, signal?: AbortSignal) => {
       try {
         setLoading({ isLoading: true, error: null });
 
@@ -139,7 +139,7 @@ export function CoveredCallsView() {
           limit: number;
           totalPages: number;
           hasMore: boolean;
-        }>(`${config.endpoints.coveredCalls}?${params.toString()}`);
+        }>(`${config.endpoints.coveredCalls}?${params.toString()}`, { signal });
 
         if (response.data.success) {
           setOptionContractsData(response.data.data);
@@ -168,8 +168,8 @@ export function CoveredCallsView() {
         }
       } catch (error: any) {
         // Ignore cancelled requests
-        if (error?.cancelled) {
-          console.log("[CoveredCallsView] Request cancelled, ignoring");
+        if (error?.cancelled || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED' || signal?.aborted) {
+          // console.log("[CoveredCallsView] Request cancelled, ignoring");
           return;
         }
         console.error("Error fetching covered calls data:", error);
@@ -184,7 +184,10 @@ export function CoveredCallsView() {
 
   // Fetch data on component mount (initial load with default filters)
   useEffect(() => {
-    fetchCoveredCallsData(1, appliedFilters);
+    const controller = new AbortController();
+    fetchCoveredCallsData(1, appliedFilters, controller.signal);
+
+    return () => controller.abort();
     // We intentionally only load once on mount; filters are applied via button
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -245,10 +248,10 @@ export function CoveredCallsView() {
   };
 
   const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",  // 2-digit year → dd/mm/yy
-      }) : "-");
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",  // 2-digit year → dd/mm/yy
+  }) : "-");
 
   return (
     <div className="space-y-6">
@@ -327,47 +330,49 @@ export function CoveredCallsView() {
             {/* Option Type Filter */}
             <div className="space-y-6">
               <Label className="text-sm font-medium">Option Type</Label>
-                  <RadioGroup className="flex space-x-2" value={optionFilter} onValueChange={(value: any) => {setOptionFilter(value)
-                    setFilters((prev) => ({
-                    ...prev,
-                    optionType: value,
-                  }))}}>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="" id="both" />
-                      <Label htmlFor="both" className="text-sm font-normal">All</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="CE" id="CE" />
-                      <Label htmlFor="CE" className="text-sm font-normal">Call (CE)</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="PE" id="PE" />
-                      <Label htmlFor="PE" className="text-sm font-normal">Put (PE)</Label>
-                    </div>
-                  </RadioGroup>
+              <RadioGroup className="flex space-x-2" value={optionFilter} onValueChange={(value: any) => {
+                setOptionFilter(value)
+                setFilters((prev) => ({
+                  ...prev,
+                  optionType: value,
+                }))
+              }}>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="" id="both" />
+                  <Label htmlFor="both" className="text-sm font-normal">All</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="CE" id="CE" />
+                  <Label htmlFor="CE" className="text-sm font-normal">Call (CE)</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="PE" id="PE" />
+                  <Label htmlFor="PE" className="text-sm font-normal">Put (PE)</Label>
+                </div>
+              </RadioGroup>
             </div>
 
             <div className="space-y-4">
               <Label className="text-sm font-medium">Expiry Month</Label>
-                <Select
-                    value={filters.expiryMonth || "ALL"}
-                    onValueChange={(value) => setFilters((prev) => ({
-                    ...prev,
-                    expiryMonth: value,
-                  }))}
-                >
-                    <SelectTrigger className="w-[160px]">
-                        <SelectValue placeholder="Select expiry" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="ALL">All</SelectItem>
-                        {expiryFilter?.map((month) => (
-                          <SelectItem key={month?.trim()} value={month}>
-                            {month}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+              <Select
+                value={filters.expiryMonth || "ALL"}
+                onValueChange={(value) => setFilters((prev) => ({
+                  ...prev,
+                  expiryMonth: value,
+                }))}
+              >
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Select expiry" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">All</SelectItem>
+                  {expiryFilter?.map((month) => (
+                    <SelectItem key={month?.trim()} value={month}>
+                      {month}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* OTM % Filter - Dual Slider */}
@@ -377,15 +382,15 @@ export function CoveredCallsView() {
                 <div className="relative w-full px-3">
                   {/* Slider */}
                   <div className="relative">
-                  <Slider
-                    value={[filters.otmMin, filters.otmMax]}
-                    onValueChange={(value) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        otmMin: value[0],
-                        otmMax: value[1],
-                      }))
-                    }
+                    <Slider
+                      value={[filters.otmMin, filters.otmMax]}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          otmMin: value[0],
+                          otmMax: value[1],
+                        }))
+                      }
                       min={-100}
                       max={100}
                       step={1}
@@ -398,7 +403,7 @@ export function CoveredCallsView() {
                         [&_[role=slider]]:shadow-lg
                         [&>.relative]:h-2
                         [&_.bg-primary]:bg-primary"
-                  />
+                    />
 
                     {/* Editable value inputs */}
                     {[
@@ -437,7 +442,7 @@ export function CoveredCallsView() {
                           max={idx === 0 ? filters.otmMax : 100}
                           className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
                         />
-                  </div>
+                      </div>
                     ))}
                   </div>
 
@@ -458,15 +463,15 @@ export function CoveredCallsView() {
                 <div className="relative w-full px-3">
                   {/* Slider */}
                   <div className="relative">
-                  <Slider
-                    value={[filters.premiumMin, filters.premiumMax]}
-                    onValueChange={(value) =>
-                      setFilters((prev) => ({
-                        ...prev,
-                        premiumMin: value[0],
-                        premiumMax: value[1],
-                      }))
-                    }
+                    <Slider
+                      value={[filters.premiumMin, filters.premiumMax]}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          premiumMin: value[0],
+                          premiumMax: value[1],
+                        }))
+                      }
                       min={0}
                       max={50}
                       step={1}
@@ -479,7 +484,7 @@ export function CoveredCallsView() {
                         [&_[role=slider]]:shadow-lg
                         [&>.relative]:h-2
                         [&_.bg-primary]:bg-primary"
-                  />
+                    />
 
                     {/* Editable value inputs */}
                     {[
@@ -518,7 +523,7 @@ export function CoveredCallsView() {
                           max={idx === 0 ? filters.premiumMax : 50}
                           className="h-6 w-12 text-xs font-medium text-primary text-center px-1 py-0"
                         />
-                  </div>
+                      </div>
                     ))}
                   </div>
 
@@ -753,11 +758,10 @@ export function CoveredCallsView() {
                       return (
                         <TableRow
                           key={index}
-                          className={`hover:bg-muted/50 cursor-pointer transition-colors ${
-                            atmOption
-                              ? "bg-blue-50/50 dark:bg-blue-950/20"
-                              : ""
-                          }`}
+                          className={`hover:bg-muted/50 cursor-pointer transition-colors ${atmOption
+                            ? "bg-blue-50/50 dark:bg-blue-950/20"
+                            : ""
+                            }`}
                           onClick={() => {
                             const url = `/covered-calls-details/${option.id}?` +
                               new URLSearchParams({
@@ -781,7 +785,7 @@ export function CoveredCallsView() {
                             {option.underlyingSymbol}
                           </TableCell>
                           <TableCell className="text-center font-medium">
-                            {formatDateOnly(option.time)+" "+(option.time.split(" ")[1])+" "+(option.time.split(" ")[2])}
+                            {formatDateOnly(option.time) + " " + (option.time.split(" ")[1]) + " " + (option.time.split(" ")[2])}
                           </TableCell>
                           <TableCell className="text-center font-mono text-base">
                             {formatPrice(option.underlyingPrice)}
@@ -823,7 +827,7 @@ export function CoveredCallsView() {
                     })}
                   </TableBody>
                 </Table>
-            </div>
+              </div>
             </CardContent>
           </Card>
 

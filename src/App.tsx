@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+// import { useEffect, useState } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import { HistoricalDataView } from '@/components/HistoricalData';
@@ -33,14 +33,9 @@ function App() {
     return 'live-watch';
   };
 
-  const [currentView, setCurrentView] = useState<View>(getCurrentView());
-
-  useEffect(() => {
-    setCurrentView(getCurrentView());
-  }, [location.pathname]);
+  const currentView = getCurrentView();
 
   const handleViewChange = (view: View) => {
-    setCurrentView(view);
     // Navigate to the corresponding route
     switch (view) {
       case 'historical':

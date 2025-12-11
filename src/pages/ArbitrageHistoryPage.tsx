@@ -87,7 +87,7 @@ export default function ArbitrageHistoryPage() {
     }, []);
 
     // Fetch history when instrument or dates change
-    const fetchHistory = async () => {
+    const fetchHistory = async (signal?: AbortSignal) => {
         if (!selectedInstrumentId) return;
 
         try {
@@ -97,23 +97,29 @@ export default function ArbitrageHistoryPage() {
             if (endDate) params.append("endDate", endDate);
 
             const response = await apiClient.get(
-                `${import.meta.env.VITE_API_BASE_URL}/api/arbitrage-details/${selectedInstrumentId}/history?${params.toString()}`
+                `${import.meta.env.VITE_API_BASE_URL}/api/arbitrage-details/${selectedInstrumentId}/history?${params.toString()}`,
+                { signal }
             );
 
             if (response.data.success) {
                 setHistoryData(response.data.data);
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED' || signal?.aborted) {
+                return;
+            }
             console.error("Failed to fetch history:", error);
         } finally {
-            setLoading(false);
+            if (!signal?.aborted) setLoading(false);
         }
     };
 
     useEffect(() => {
+        const controller = new AbortController();
         if (selectedInstrumentId) {
-            fetchHistory();
+            fetchHistory(controller.signal);
         }
+        return () => controller.abort();
     }, [selectedInstrumentId]); // Auto-fetch on symbol change
 
     const formatNumber = (num: number | null, decimals = 2) => {
