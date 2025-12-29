@@ -33,6 +33,8 @@ type ExtendedHistoricalData = HistoricalData & {
 
 export function HistoricalDataView() {
   const [data, setData] = useState<ExtendedHistoricalData[]>([]);
+
+
   const [sortField, setSortField] = useState<keyof ExtendedHistoricalData>('timestamp');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedSymbol, setSelectedSymbol] = useState<string>('');
@@ -68,6 +70,46 @@ export function HistoricalDataView() {
     premiumMin: 0,
     premiumMax: 25,
   });
+
+  // Local string state for inputs
+  const [fromDateStr, setFromDateStr] = useState('');
+  const [toDateStr, setToDateStr] = useState('');
+
+  // Sychronize local state when global state changes
+  useEffect(() => {
+    setFromDateStr(pendingDateRange.from ? pendingDateRange.from.toISOString().split('T')[0] : '');
+  }, [pendingDateRange.from]);
+
+  useEffect(() => {
+    setToDateStr(pendingDateRange.to ? pendingDateRange.to.toISOString().split('T')[0] : '');
+  }, [pendingDateRange.to]);
+
+  const handleDateInputStringChange = (
+    type: 'from' | 'to',
+    value: string
+  ) => {
+    if (type === 'from') {
+      setFromDateStr(value);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const d = new Date(value);
+        if (!Number.isNaN(d.getTime())) {
+          setPendingDateRange((prev) => ({ ...prev, from: d }));
+        }
+      } else if (value === '') {
+        setPendingDateRange((prev) => ({ ...prev, from: null }));
+      }
+    } else {
+      setToDateStr(value);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const d = new Date(value);
+        if (!Number.isNaN(d.getTime())) {
+          setPendingDateRange((prev) => ({ ...prev, to: d }));
+        }
+      } else if (value === '') {
+        setPendingDateRange((prev) => ({ ...prev, to: null }));
+      }
+    }
+  };
 
   const loadSymbolsFromApi = useCallback(async () => {
     setIsLoadingSymbols(true);
@@ -458,19 +500,19 @@ export function HistoricalDataView() {
     const sorted = filtered.sort((a, b) => {
       const aVal = a[sortField];
       const bVal = b[sortField];
-      
+
       if (typeof aVal === 'string' && typeof bVal === 'string') {
         return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
       }
-      
+
       if (typeof aVal === 'number' && typeof bVal === 'number') {
         return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
       }
-      
+
       if (aVal instanceof Date && bVal instanceof Date) {
         return sortDirection === 'asc' ? aVal.getTime() - bVal.getTime() : bVal.getTime() - aVal.getTime();
       }
-      
+
       return 0;
     });
 
@@ -708,7 +750,7 @@ export function HistoricalDataView() {
                 <p className="text-xs text-destructive">{symbolsError}</p>
               )}
             </div>
-            
+
             <div className="space-y-2">
               <label className="text-sm font-medium">Segment</label>
               <Select onValueChange={(value) => setFilters({ ...filters, segment: value === "all" ? [] : [value] })}>
@@ -733,11 +775,8 @@ export function HistoricalDataView() {
                     <Input
                       type="text"
                       placeholder="YYYY-MM-DD"
-                      value={pendingDateRange.from ? pendingDateRange.from.toISOString().split('T')[0] : ''}
-                      onChange={(e) => {
-                        const value = e.target.value ? new Date(e.target.value) : null;
-                        setPendingDateRange((prev) => ({ ...prev, from: value }));
-                      }}
+                      value={fromDateStr}
+                      onChange={(e) => handleDateInputStringChange('from', e.target.value)}
                       className="h-9 text-sm sm:text-xs w-full"
                       autoComplete="off"
                       inputMode="numeric"
@@ -767,11 +806,8 @@ export function HistoricalDataView() {
                     <Input
                       type="text"
                       placeholder="YYYY-MM-DD"
-                      value={pendingDateRange.to ? pendingDateRange.to.toISOString().split('T')[0] : ''}
-                      onChange={(e) => {
-                        const value = e.target.value ? new Date(e.target.value) : null;
-                        setPendingDateRange((prev) => ({ ...prev, to: value }));
-                      }}
+                      value={toDateStr}
+                      onChange={(e) => handleDateInputStringChange('to', e.target.value)}
                       className="h-9 text-sm sm:text-xs w-full"
                       autoComplete="off"
                       inputMode="numeric"
@@ -818,7 +854,7 @@ export function HistoricalDataView() {
                 </Button>
               </div>
             </div>
-            
+
             {/* <div className="space-y-2">
               <label className="text-sm font-medium">Items per page</label>
               <Select value={itemsPerPage.toString()} onValueChange={(value) => setItemsPerPage(parseInt(value))}>
@@ -837,131 +873,131 @@ export function HistoricalDataView() {
         </CardContent>
       </Card>
 
-     {selectedSegment === 'NSE_OPT' && ( <Card>
+      {selectedSegment === 'NSE_OPT' && (<Card>
         <CardHeader>
           <CardTitle>Options Filters</CardTitle>
         </CardHeader>
-        <CardContent>          
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">OTM %</label>
-                  <div className="relative w-full px-1 pt-6">
-                    <Slider
-                      min={-100}
-                      max={100}
-                      step={1}
-                      value={[
-                        filters.otmMin ?? -50,
-                        filters.otmMax ?? 50,
-                      ]}
-                      onValueChange={(value) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          otmMin: clamp(value[0], -100, value[1]),
-                          otmMax: clamp(value[1], value[0], 100),
-                        }))
-                      }
+        <CardContent>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">OTM %</label>
+              <div className="relative w-full px-1 pt-6">
+                <Slider
+                  min={-100}
+                  max={100}
+                  step={1}
+                  value={[
+                    filters.otmMin ?? -50,
+                    filters.otmMax ?? 50,
+                  ]}
+                  onValueChange={(value) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      otmMin: clamp(value[0], -100, value[1]),
+                      otmMax: clamp(value[1], value[0], 100),
+                    }))
+                  }
+                />
+                {[{ key: "min", val: filters.otmMin ?? -50 }, { key: "max", val: filters.otmMax ?? 50 }].map((item) => (
+                  <div
+                    key={item.key}
+                    className="absolute -top-3 -translate-x-1/2"
+                    style={{ left: `${valuePosition(item.val, -100, 100)}%` }}
+                  >
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      min={item.key === "min" ? -100 : filters.otmMin ?? -100}
+                      max={item.key === "min" ? filters.otmMax ?? 100 : 100}
+                      value={item.val}
+                      onChange={(e) => {
+                        const raw = Number(e.target.value);
+                        if (item.key === "min") {
+                          const next = Number.isFinite(raw) ? clamp(raw, -100, filters.otmMax ?? 100) : filters.otmMin ?? -50;
+                          setFilters((prev) => ({ ...prev, otmMin: next, otmMax: Math.max(next, prev.otmMax ?? next) }));
+                        } else {
+                          const next = Number.isFinite(raw) ? clamp(raw, filters.otmMin ?? -100, 100) : filters.otmMax ?? 50;
+                          setFilters((prev) => ({ ...prev, otmMax: next, otmMin: Math.min(prev.otmMin ?? next, next) }));
+                        }
+                      }}
+                      className="h-7 w-14 text-xs text-center font-medium"
                     />
-                    {[{ key: "min", val: filters.otmMin ?? -50 }, { key: "max", val: filters.otmMax ?? 50 }].map((item) => (
-                      <div
-                        key={item.key}
-                        className="absolute -top-3 -translate-x-1/2"
-                        style={{ left: `${valuePosition(item.val, -100, 100)}%` }}
-                      >
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          min={item.key === "min" ? -100 : filters.otmMin ?? -100}
-                          max={item.key === "min" ? filters.otmMax ?? 100 : 100}
-                          value={item.val}
-                          onChange={(e) => {
-                            const raw = Number(e.target.value);
-                            if (item.key === "min") {
-                              const next = Number.isFinite(raw) ? clamp(raw, -100, filters.otmMax ?? 100) : filters.otmMin ?? -50;
-                              setFilters((prev) => ({ ...prev, otmMin: next, otmMax: Math.max(next, prev.otmMax ?? next) }));
-                            } else {
-                              const next = Number.isFinite(raw) ? clamp(raw, filters.otmMin ?? -100, 100) : filters.otmMax ?? 50;
-                              setFilters((prev) => ({ ...prev, otmMax: next, otmMin: Math.min(prev.otmMin ?? next, next) }));
-                            }
-                          }}
-                          className="h-7 w-14 text-xs text-center font-medium"
-                        />
-                      </div>
-                    ))}
-                    <div className="flex justify-between text-xs text-muted-foreground mt-3">
-                      <span>-100%</span>
-                      <span>0%</span>
-                      <span>100%</span>
-                    </div>
                   </div>
+                ))}
+                <div className="flex justify-between text-xs text-muted-foreground mt-3">
+                  <span>-100%</span>
+                  <span>0%</span>
+                  <span>100%</span>
                 </div>
+              </div>
+            </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Premium %</label>
-                  <div className="relative w-full px-1 pt-6">
-                    <Slider
-                      min={0}
-                      max={50}
-                      step={0.5}
-                      value={[
-                        filters.premiumMin ?? 0,
-                        filters.premiumMax ?? 25,
-                      ]}
-                      onValueChange={(value) =>
-                        setFilters((prev) => ({
-                          ...prev,
-                          premiumMin: clamp(value[0], 0, value[1]),
-                          premiumMax: clamp(value[1], value[0], 50),
-                        }))
-                      }
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Premium %</label>
+              <div className="relative w-full px-1 pt-6">
+                <Slider
+                  min={0}
+                  max={50}
+                  step={0.5}
+                  value={[
+                    filters.premiumMin ?? 0,
+                    filters.premiumMax ?? 25,
+                  ]}
+                  onValueChange={(value) =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      premiumMin: clamp(value[0], 0, value[1]),
+                      premiumMax: clamp(value[1], value[0], 50),
+                    }))
+                  }
+                />
+                {[{ key: "min", val: filters.premiumMin ?? 0 }, { key: "max", val: filters.premiumMax ?? 25 }].map((item) => (
+                  <div
+                    key={item.key}
+                    className="absolute -top-3 -translate-x-1/2"
+                    style={{ left: `${valuePosition(item.val, 0, 50)}%` }}
+                  >
+                    <Input
+                      type="text"
+                      inputMode="decimal"
+                      min={item.key === "min" ? 0 : filters.premiumMin ?? 0}
+                      max={item.key === "min" ? filters.premiumMax ?? 50 : 50}
+                      step="0.5"
+                      value={item.val}
+                      onChange={(e) => {
+                        const raw = Number(e.target.value);
+                        if (item.key === "min") {
+                          const next = Number.isFinite(raw) ? clamp(raw, 0, filters.premiumMax ?? 50) : filters.premiumMin ?? 0;
+                          setFilters((prev) => ({ ...prev, premiumMin: next, premiumMax: Math.max(next, prev.premiumMax ?? next) }));
+                        } else {
+                          const next = Number.isFinite(raw) ? clamp(raw, filters.premiumMin ?? 0, 50) : filters.premiumMax ?? 25;
+                          setFilters((prev) => ({ ...prev, premiumMax: next, premiumMin: Math.min(prev.premiumMin ?? next, next) }));
+                        }
+                      }}
+                      className="h-7 w-14 text-xs text-center font-medium"
                     />
-                    {[{ key: "min", val: filters.premiumMin ?? 0 }, { key: "max", val: filters.premiumMax ?? 25 }].map((item) => (
-                      <div
-                        key={item.key}
-                        className="absolute -top-3 -translate-x-1/2"
-                        style={{ left: `${valuePosition(item.val, 0, 50)}%` }}
-                      >
-                        <Input
-                          type="text"
-                          inputMode="decimal"
-                          min={item.key === "min" ? 0 : filters.premiumMin ?? 0}
-                          max={item.key === "min" ? filters.premiumMax ?? 50 : 50}
-                          step="0.5"
-                          value={item.val}
-                          onChange={(e) => {
-                            const raw = Number(e.target.value);
-                            if (item.key === "min") {
-                              const next = Number.isFinite(raw) ? clamp(raw, 0, filters.premiumMax ?? 50) : filters.premiumMin ?? 0;
-                              setFilters((prev) => ({ ...prev, premiumMin: next, premiumMax: Math.max(next, prev.premiumMax ?? next) }));
-                            } else {
-                              const next = Number.isFinite(raw) ? clamp(raw, filters.premiumMin ?? 0, 50) : filters.premiumMax ?? 25;
-                              setFilters((prev) => ({ ...prev, premiumMax: next, premiumMin: Math.min(prev.premiumMin ?? next, next) }));
-                            }
-                          }}
-                          className="h-7 w-14 text-xs text-center font-medium"
-                        />
-                      </div>
-                    ))}
-                    <div className="flex justify-between text-xs text-muted-foreground mt-3">
-                      <span>0%</span>
-                      <span>25%</span>
-                      <span>50%</span>
-                    </div>
                   </div>
+                ))}
+                <div className="flex justify-between text-xs text-muted-foreground mt-3">
+                  <span>0%</span>
+                  <span>25%</span>
+                  <span>50%</span>
                 </div>
               </div>
-              <div className="flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setQueryOffset(0);
-                    setOptionFilterVersion((prev) => prev + 1);
-                  }}
-                >
-                  Apply Option Filters
-                </Button>
-              </div>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setQueryOffset(0);
+                setOptionFilterVersion((prev) => prev + 1);
+              }}
+            >
+              Apply Option Filters
+            </Button>
+          </div>
         </CardContent>
       </Card>)}
 
@@ -970,7 +1006,7 @@ export function HistoricalDataView() {
           <TabsTrigger value="table">Data Table</TabsTrigger>
           <TabsTrigger value="analysis">Symbol Analysis</TabsTrigger>
         </TabsList>
-        
+
         <TabsContent value="table" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1129,7 +1165,7 @@ export function HistoricalDataView() {
                           <div>L: {displayNumber(item.low, 2)}</div>
                         </div>
                       </DataTableCell>
-                      <DataTableCell className="font-mono">{displayNumber(item.turnover,2)}</DataTableCell>
+                      <DataTableCell className="font-mono">{displayNumber(item.turnover, 2)}</DataTableCell>
                     </DataTableRow>
                   ))}
                 </DataTableBody>
@@ -1163,7 +1199,7 @@ export function HistoricalDataView() {
             </CardContent>
           </Card>
         </TabsContent>
-        
+
         <TabsContent value="analysis" className="space-y-4">
           <Card>
             <CardHeader>
@@ -1193,7 +1229,7 @@ export function HistoricalDataView() {
                     ))}
                   </SelectContent>
                 </Select>
-                
+
                 {selectedSymbol && (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {(() => {
@@ -1203,7 +1239,7 @@ export function HistoricalDataView() {
                       const totalVolume = symbolData.reduce((sum, d) => sum + d.volume, 0);
                       const maxPrice = symbolData.length ? Math.max(...symbolData.map(d => d.price)) : 0;
                       const minPrice = symbolData.length ? Math.min(...symbolData.map(d => d.price)) : 0;
-                      
+
                       return (
                         <>
                           <Card>
