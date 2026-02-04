@@ -131,6 +131,22 @@ export function LiveStockDataView() {
     loadEquities();
   }, [loadEquities]);
 
+  const symbolNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    equities.forEach((e) => {
+      if (e.upstoxId) map.set(e.upstoxId, e.instrumentType);
+      // Fallback for when we used names
+      map.set(e.instrumentType, e.instrumentType);
+    });
+    Object.values(equitySymbolMap).forEach((list) => {
+      list.forEach((s) => {
+        if (s.upstoxId) map.set(s.upstoxId, s.symbol);
+        map.set(s.symbol, s.symbol);
+      });
+    });
+    return map;
+  }, [equities, equitySymbolMap]);
+
   const liveTicks = useMemo(() => {
     const entries: Record<string, LiveTick> = {};
     Object.entries(multiSymbolData).forEach(([symbol, data]) => {
@@ -153,6 +169,7 @@ export function LiveStockDataView() {
 
       entries[symbol] = {
         symbol,
+        symbolName: symbolNameMap.get(symbol) || symbol,
         ltp: ltpValue,
         volume: Number.isNaN(numericVolume) ? 0 : numericVolume,
         bid: payload.bid !== undefined ? Number(payload.bid) : undefined,
@@ -168,7 +185,7 @@ export function LiveStockDataView() {
       lastLtpRef.current[symbol] = ltpValue;
     });
     return entries;
-  }, [multiSymbolData]);
+  }, [multiSymbolData, symbolNameMap]);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -209,7 +226,8 @@ export function LiveStockDataView() {
 
   const handleToggleEquity = (equityId: number) => {
     const equity = equities.find((item) => item.id === equityId);
-    const equitySymbol = equity?.instrumentType;
+    // Use upstoxId if available, fall back to instrumentType (name)
+    const equitySymbol = equity?.upstoxId || equity?.instrumentType;
 
     // Enforce max selection before adding the equity symbol
     if (
@@ -249,7 +267,7 @@ export function LiveStockDataView() {
     });
     setSelectionError(null);
     // Always refresh symbols for the equity so dropdown stays current
-    loadSymbols(equityId, { equityLabel: equitySymbol, skipIfCached: true });
+    loadSymbols(equityId, { equityLabel: equity?.instrumentType, skipIfCached: true });
   };
 
   const handleToggleSymbol = (symbol: string) => {
@@ -354,6 +372,7 @@ export function LiveStockDataView() {
         liveTicks={liveTicks}
         connectionStatus={symbolConnectionStatus}
         isConnected={isConnected}
+        symbolNameMap={symbolNameMap}
       />
     </div>
   );

@@ -10,6 +10,7 @@ interface LiveTickGridProps {
   liveTicks: Record<string, LiveTick>;
   connectionStatus: Record<string, "connected" | "disconnected" | "error">;
   isConnected: boolean;
+  symbolNameMap?: Map<string, string>;
 }
 
 export function LiveTickGrid({
@@ -17,6 +18,7 @@ export function LiveTickGrid({
   liveTicks,
   connectionStatus,
   isConnected,
+  symbolNameMap,
 }: LiveTickGridProps) {
   if (!selectedSymbols.length) {
     return (
@@ -38,10 +40,13 @@ export function LiveTickGrid({
           ? "disconnected"
           : connectionStatus[symbol] || (tick ? "connected" : "waiting");
 
+        const name = symbolNameMap?.get(symbol) || tick?.symbolName || symbol;
+
         return (
           <LiveTickCard
             key={symbol}
             symbol={symbol}
+            symbolName={name}
             data={tick}
             status={status}
           />

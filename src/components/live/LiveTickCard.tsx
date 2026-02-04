@@ -7,6 +7,7 @@ type LiveStatus = "connected" | "disconnected" | "error" | "waiting";
 
 interface LiveTickCardProps {
   symbol: string;
+  symbolName?: string;
   data?: LiveTick;
   status: LiveStatus;
 }
@@ -53,7 +54,7 @@ function formatTimestamp(timestamp?: string) {
   });
 }
 
-export function LiveTickCard({ symbol, data, status }: LiveTickCardProps) {
+export function LiveTickCard({ symbol, symbolName, data, status }: LiveTickCardProps) {
   const badgeConfig = statusConfig[status];
 
   return (
@@ -70,7 +71,7 @@ export function LiveTickCard({ symbol, data, status }: LiveTickCardProps) {
             ) : (
               <WifiOff className="h-4 w-4 text-slate-500" />
             )}
-            <CardTitle className="text-lg font-mono">{symbol}</CardTitle>
+            <CardTitle className="text-lg font-mono">{symbolName || data?.symbolName || symbol}</CardTitle>
           </div>
           <Badge variant={badgeConfig.variant} className="text-xs">
             {badgeConfig.label}

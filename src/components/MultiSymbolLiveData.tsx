@@ -8,15 +8,31 @@ import { SymbolOHLCTable } from "./SymbolOHLCTable";
 import { useSocketIO } from "@/hooks/useSocketIO";
 import { MarketHoursManager, DataValidator } from "@/utils/errorHandling";
 import {
-  MultiSymbolLiveDataProps,
   OHLCData,
   SymbolMarketData,
 } from "@/types/market";
+
+export interface SymbolConfig {
+  symbol: string;
+  upstoxId?: string;
+}
+
+interface MultiSymbolLiveDataProps {
+  symbols: (string | SymbolConfig)[];
+  isMarketOpen: boolean;
+}
 
 export function MultiSymbolLiveData({
   symbols,
   isMarketOpen,
 }: MultiSymbolLiveDataProps) {
+  // Normalize symbols to SymbolConfig format
+  const symbolConfigs = useMemo(() => {
+    return symbols.map(s =>
+      typeof s === 'string' ? { symbol: s, upstoxId: s } : s
+    );
+  }, [symbols]);
+
   // WebSocket connection for live data
   const {
     isConnected,
@@ -101,7 +117,11 @@ export function MultiSymbolLiveData({
 
   // Enhanced market data to OHLC transformation with error tracking
   useEffect(() => {
-    Object.entries(multiSymbolData).forEach(([symbol, data]) => {
+    Object.entries(multiSymbolData).forEach(([key, data]) => {
+      // Try to find matching symbol config
+      const config = symbolConfigs.find(s => s.upstoxId === key || s.symbol === key);
+      const symbolKey = config ? config.symbol : key;
+
       if (
         data &&
         data.bid !== undefined &&
@@ -118,10 +138,10 @@ export function MultiSymbolLiveData({
         };
 
         // Add OHLC entry (validation happens inside addOHLCEntry)
-        addOHLCEntry(symbol, ohlcEntry);
+        addOHLCEntry(symbolKey, ohlcEntry);
       }
     });
-  }, [multiSymbolData, addOHLCEntry]);
+  }, [multiSymbolData, addOHLCEntry, symbolConfigs]);
 
   // Track errors and update error state
   useEffect(() => {
@@ -133,20 +153,23 @@ export function MultiSymbolLiveData({
   // Enhanced subscription management with better error handling
   useEffect(() => {
     // Validate symbols before attempting subscription
-    const validSymbols = symbols.filter((symbol) => {
-      if (!DataValidator.isValidSymbol(symbol)) {
-        console.warn(`❌ Invalid symbol format: ${symbol}`);
-        setConnectionErrors((prev) => ({
-          ...prev,
-          [symbol]: {
-            message: "Invalid symbol format",
-            timestamp: new Date(),
-          },
-        }));
-        return false;
-      }
-      return true;
-    });
+    // Use upstoxId for subscription logic if available, fallback to symbol
+    const validSymbols = symbolConfigs
+      .map(s => s.upstoxId || s.symbol)
+      .filter((id) => {
+        if (!DataValidator.isValidSymbol(id)) {
+          console.warn(`❌ Invalid symbol format: ${id}`);
+          setConnectionErrors((prev) => ({
+            ...prev,
+            [id]: {
+              message: "Invalid symbol format",
+              timestamp: new Date(),
+            },
+          }));
+          return false;
+        }
+        return true;
+      });
 
     if (!validSymbols.length) {
       // console.warn("⚠️ No valid symbols provided");
@@ -183,7 +206,7 @@ export function MultiSymbolLiveData({
       unsubscribeFromSymbols(validSymbols);
     };
   }, [
-    symbols,
+    symbolConfigs,  // Depend on the normalized configs
     isConnected,
     isMarketOpen,
     subscribeToSymbols,
@@ -201,9 +224,9 @@ export function MultiSymbolLiveData({
     setLastErrorTime(null);
 
     // Validate symbols before refresh
-    const validSymbols = symbols.filter((symbol) =>
-      DataValidator.isValidSymbol(symbol)
-    );
+    const validSymbols = symbolConfigs
+      .map(s => s.upstoxId || s.symbol)
+      .filter((id) => DataValidator.isValidSymbol(id));
 
     if (validSymbols.length === 0) {
       console.warn("⚠️ No valid symbols to refresh");
@@ -224,7 +247,7 @@ export function MultiSymbolLiveData({
       setIsRefreshing(false);
     }
   }, [
-    symbols,
+    symbolConfigs,
     isMarketOpen,
     isConnected,
     subscribeToSymbols,
@@ -233,23 +256,26 @@ export function MultiSymbolLiveData({
 
   // Transform multiSymbolData to SymbolMarketData format for cards
   const symbolsData: SymbolMarketData[] = useMemo(() => {
-    return symbols.map((symbol) => {
-      const data = multiSymbolData[symbol];
+    return symbolConfigs.map((config) => {
+      // Lookup data using upstoxId first, then symbol
+      const dataKey = config.upstoxId || config.symbol;
+      const data = multiSymbolData[dataKey];
+
       // If main WebSocket is not connected, force all symbols to show as disconnected
       const status = !isConnected
         ? "disconnected"
-        : (symbolConnectionStatus[symbol] || "disconnected");
+        : (symbolConnectionStatus[dataKey] || "disconnected");
 
       return {
-        symbol,
+        symbol: config.symbol, // Display name
         ltp: data?.price || data?.ltp || 0,
         volume: data?.volume || 0,
         timestamp: data?.timestamp || new Date().toISOString(),
-        ohlcHistory: getLatestEntries(symbol),
+        ohlcHistory: getLatestEntries(config.symbol),
         status,
       };
     });
-  }, [symbols, multiSymbolData, symbolConnectionStatus, getLatestEntries, isConnected]);
+  }, [symbolConfigs, multiSymbolData, symbolConnectionStatus, getLatestEntries, isConnected]);
 
   // Enhanced overall connection status with error detection
   const overallConnectionStatus = useMemo(() => {
@@ -261,18 +287,19 @@ export function MultiSymbolLiveData({
     if (marketStatus === "closed") return "MARKET CLOSED";
 
     // Filter valid symbols for status calculation
-    const validSymbols = symbols.filter((symbol) =>
-      DataValidator.isValidSymbol(symbol)
-    );
+    // Use the normalized list of symbol IDs (upstoxId or symbol name)
+    const validSymbolIds = symbolConfigs
+      .map(s => s.upstoxId || s.symbol)
+      .filter((id) => DataValidator.isValidSymbol(id));
 
-    if (validSymbols.length === 0) return "NO VALID SYMBOLS";
+    if (validSymbolIds.length === 0) return "NO VALID SYMBOLS";
 
-    const connectedCount = validSymbols.filter(
-      (symbol) => symbolConnectionStatus[symbol] === "connected"
+    const connectedCount = validSymbolIds.filter(
+      (id) => symbolConnectionStatus[id] === "connected"
     ).length;
 
-    const errorCount = validSymbols.filter(
-      (symbol) => symbolConnectionStatus[symbol] === "error"
+    const errorCount = validSymbolIds.filter(
+      (id) => symbolConnectionStatus[id] === "error"
     ).length;
 
     // Check for connection errors
@@ -281,7 +308,7 @@ export function MultiSymbolLiveData({
       return "PARTIAL ERROR";
     }
 
-    if (connectedCount === validSymbols.length) return "LIVE";
+    if (connectedCount === validSymbolIds.length) return "LIVE";
     if (connectedCount > 0) return "PARTIAL";
     return "OFFLINE";
   }, [isConnected, symbols, symbolConnectionStatus, connectionErrors]);

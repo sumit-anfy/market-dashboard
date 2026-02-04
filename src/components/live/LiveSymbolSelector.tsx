@@ -187,13 +187,14 @@ export function LiveSymbolSelector({
                   </CommandEmpty>
                   <CommandGroup heading="FUT">
                     {futSymbols.map((symbol) => {
-                      const isChecked = selectedSymbols.includes(symbol.symbol);
+                      const id = symbol.upstoxId || symbol.symbol;
+                      const isChecked = selectedSymbols.includes(id);
                       return (
                         <CommandItem
                           key={`${symbol.id}-fut`}
-                          value={symbol.symbol}
+                          value={id}
                           className="cursor-pointer"
-                          onSelect={() => onToggleSymbol(symbol.symbol)}
+                          onSelect={() => onToggleSymbol(id)}
                         >
                           <div className="flex w-full items-center justify-between">
                             <div>
@@ -204,7 +205,7 @@ export function LiveSymbolSelector({
                             </div>
                             <Checkbox
                               checked={isChecked}
-                              onCheckedChange={() => onToggleSymbol(symbol.symbol)}
+                              onCheckedChange={() => onToggleSymbol(id)}
                             />
                           </div>
                         </CommandItem>
@@ -263,13 +264,14 @@ export function LiveSymbolSelector({
                   </CommandEmpty>
                   <CommandGroup heading="OPT">
                     {optSymbols.map((symbol) => {
-                      const isChecked = selectedSymbols.includes(symbol.symbol);
+                      const id = symbol.upstoxId || symbol.symbol;
+                      const isChecked = selectedSymbols.includes(id);
                       return (
                         <CommandItem
                           key={`${symbol.id}-opt`}
-                          value={symbol.symbol}
+                          value={id}
                           className="cursor-pointer"
-                          onSelect={() => onToggleSymbol(symbol.symbol)}
+                          onSelect={() => onToggleSymbol(id)}
                         >
                           <div className="flex w-full items-center justify-between">
                             <div>
@@ -280,7 +282,7 @@ export function LiveSymbolSelector({
                             </div>
                             <Checkbox
                               checked={isChecked}
-                              onCheckedChange={() => onToggleSymbol(symbol.symbol)}
+                              onCheckedChange={() => onToggleSymbol(id)}
                             />
                           </div>
                         </CommandItem>
@@ -323,22 +325,28 @@ export function LiveSymbolSelector({
 
       {selectedSymbols.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {selectedSymbols.map((symbol) => (
-            <Badge
-              key={symbol}
-              variant="secondary"
-              className="flex items-center gap-1 text-xs"
-            >
-              {symbol}
-              <button
-                type="button"
-                onClick={() => onToggleSymbol(symbol)}
-                className="hover:text-foreground"
+          {selectedSymbols.map((id) => {
+            const deriv = symbolOptions.find((s) => (s.upstoxId || s.symbol) === id);
+            const equity = equities.find((e) => (e.upstoxId || e.instrumentType) === id);
+            const displayName = deriv?.symbol || equity?.instrumentType || id;
+
+            return (
+              <Badge
+                key={id}
+                variant="secondary"
+                className="flex items-center gap-1 text-xs"
               >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-          ))}
+                {displayName}
+                <button
+                  type="button"
+                  onClick={() => onToggleSymbol(id)}
+                  className="hover:text-foreground"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            );
+          })}
         </div>
       )}
     </div>

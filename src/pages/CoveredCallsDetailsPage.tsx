@@ -58,7 +58,8 @@ interface TrendTableSortConfig {
 }
 
 interface LiveSnapshot {
-  symbol: string;
+  symbol: string; // upstox_id
+  symbolName?: string;
   ltp: number;
   volume: number;
   bid: number;
@@ -71,8 +72,8 @@ interface LiveSnapshot {
 
 interface StrikeGroup {
   strike: number;
-  ce?: { symbol: string };
-  pe?: { symbol: string };
+  ce?: { symbol: string; symbolName?: string };
+  pe?: { symbol: string; symbolName?: string };
 }
 
 
@@ -173,7 +174,7 @@ export default function CoveredCallsDetailsPage() {
   const {
     symbolExpiries,
     expiryDates,
-  } = useCoveredCallsFilters({ instrumentId: instrumentId!});
+  } = useCoveredCallsFilters({ instrumentId: instrumentId! });
 
   // Selected expiry date (nearest by default)
   const [selectedExpiry, setSelectedExpiry] = useState<string | undefined>();
@@ -200,7 +201,7 @@ export default function CoveredCallsDetailsPage() {
   // Build grouping by strike with CE/PE symbols and index for quick lookup, for the selected expiry only
   const { strikeGroups, symbolIndex, symbols } = useMemo(() => {
     const groupsMap = new Map<number, StrikeGroup>();
-    const index = new Map<string, { strike: number; side: OptionSide }>();
+    const index = new Map<string, { strike: number; side: OptionSide; symbolName: string }>();
     const allSymbols: string[] = [];
 
     if (!selectedExpiry) {
@@ -211,17 +212,19 @@ export default function CoveredCallsDetailsPage() {
       .filter((row) => row.expiry_date === selectedExpiry)
       .forEach((row) => {
         const strike = Number(row.strike);
-        const symbol = String(row.symbol);
-        const side: OptionSide = symbol.endsWith("PE") ? "PE" : "CE";
+        const symbolName = String(row.symbol);
+        // Use upstox_id if available, otherwise fallback to symbol name (though unlikely to work for WS)
+        const upstoxId = row.upstox_id || symbolName;
+        const side: OptionSide = symbolName.endsWith("PE") ? "PE" : "CE";
 
         if (!groupsMap.has(strike)) groupsMap.set(strike, { strike });
         const group = groupsMap.get(strike)!;
-        if (side === "CE") group.ce = { symbol };
-        else group.pe = { symbol };
+        if (side === "CE") group.ce = { symbol: upstoxId, symbolName };
+        else group.pe = { symbol: upstoxId, symbolName };
 
-        if (!index.has(symbol)) {
-          index.set(symbol, { strike, side });
-          allSymbols.push(symbol);
+        if (!index.has(upstoxId)) {
+          index.set(upstoxId, { strike, side, symbolName });
+          allSymbols.push(upstoxId);
         }
       });
 
@@ -247,11 +250,15 @@ export default function CoveredCallsDetailsPage() {
     error,
   } = useSocketIO();
 
-  // Underlying symbol and live price (computed after socket is available)
-  const underlyingSymbol = useMemo(() => {
+  // Underlying symbol logic: separate ID (for WS) and Name (for Display)
+  const underlyingData = useMemo(() => {
     const row = (baseData || [])[0];
-    return row?.underlying as string | undefined;
+    return {
+      upstoxId: row?.underlying_upstox_id || row?.underlying,
+      displayName: row?.underlying || row?.underlying_upstox_id
+    };
   }, [baseData]);
+
   // Keep last known underlying price even if no websocket data arrives
   const initialUnderlyingPrice = useMemo(() => {
     const v = searchParams.get("underlyingPrice");
@@ -271,17 +278,17 @@ export default function CoveredCallsDetailsPage() {
   }, [baseData, underlyingPrice]);
   // Update from websocket when available, otherwise retain last
   useEffect(() => {
-    if (!underlyingSymbol) return;
-    const d: any = (multiSymbolData as any)[underlyingSymbol];
+    if (!underlyingData.upstoxId) return;
+    const d: any = (multiSymbolData as any)[underlyingData.upstoxId];
     const v = d?.price ?? d?.ltp;
     if (typeof v === "number") setUnderlyingPrice(v);
-  }, [multiSymbolData, underlyingSymbol]);
+  }, [multiSymbolData, underlyingData.upstoxId]);
 
   // Subscribe/unsubscribe following Arbitrage logic
   // Subscribe also to underlying to display its live price and shade strikes
   const subscriptionSymbols = useMemo(() => {
-    return underlyingSymbol ? [...symbols, underlyingSymbol] : symbols;
-  }, [symbols, underlyingSymbol]);
+    return underlyingData.upstoxId ? [...symbols, underlyingData.upstoxId] : symbols;
+  }, [symbols, underlyingData.upstoxId]);
   const symbolsKey = useMemo(() => subscriptionSymbols.join("|"), [subscriptionSymbols]);
   useEffect(() => {
     if (!subscriptionSymbols.length) return;
@@ -466,11 +473,14 @@ export default function CoveredCallsDetailsPage() {
           let maxDate: string | null = null;
           for (const r of rows) {
             const strikeNum = Number(r.strike);
-            const sym: string = r.symbol;
-            const side: OptionSide = sym.endsWith("PE") ? "PE" : "CE";
+            const symbolName: string = r.symbol;
+            // Use upstox_id if available (backend updated to return it)
+            const sym = r.upstox_id || symbolName;
+            const side: OptionSide = symbolName.endsWith("PE") ? "PE" : "CE";
             const ts = r.time;
             const s: LiveSnapshot = {
               symbol: sym,
+              symbolName: symbolName,
               ltp: Number(r.ltp) || 0,
               volume: Number(r.volume) || 0,
               bid: Number(r.bid) || 0,
@@ -526,7 +536,7 @@ export default function CoveredCallsDetailsPage() {
 
   // Populate initial selected row (from list) as last fallback for its strike/side
   useEffect(() => {
-    const sym = searchParams.get("optionSymbol");
+    const sym = searchParams.get("optionSymbol"); // This is likely name from URL
     const strike = searchParams.get("strikePrice");
     const premium = searchParams.get("premium");
     const volume = searchParams.get("volume");
@@ -539,7 +549,8 @@ export default function CoveredCallsDetailsPage() {
       const prevGroup = prev[strikeNum] || {};
       if ((prevGroup as any)[side.toLowerCase()]) return prev; // don't overwrite if exists
       const s: LiveSnapshot = {
-        symbol: sym,
+        symbol: sym, // Might be name if from URL, but subscription should fix it if index matches
+        symbolName: sym,
         ltp: premium ? Number(premium) : 0,
         volume: volume ? Number(volume) : 0,
         bid: 0,
@@ -572,6 +583,7 @@ export default function CoveredCallsDetailsPage() {
 
       const next: LiveSnapshot = {
         symbol,
+        symbolName: idx.symbolName,
         ltp: (data.price as number) ?? (data.ltp as number) ?? 0,
         volume: (data.volume as number) ?? 0,
         bid: (data.bid as number) ?? 0,
@@ -1019,7 +1031,7 @@ export default function CoveredCallsDetailsPage() {
       <CoveredCallsHeader />
 
       <CoveredCallsBanner
-        underlyingSymbol={underlyingSymbol}
+        underlyingSymbol={underlyingData.displayName}
         underlyingPrice={underlyingPrice}
       />
 

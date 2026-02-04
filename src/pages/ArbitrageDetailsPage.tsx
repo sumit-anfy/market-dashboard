@@ -32,10 +32,13 @@ interface LocationState {
   name: string;
   date: string;
   symbol_1: string;
+  upstox_id_1?: string;
   price_1: number;
   symbol_2: string;
+  upstox_id_2?: string;
   price_2: number;
   symbol_3: string;
+  upstox_id_3?: string;
   price_3: number;
   gap_1: number;
   gap_2: number;
@@ -78,12 +81,15 @@ export default function ArbitrageDetailsPage() {
       const name = searchParams.get("name");
       const date = searchParams.get("date");
       const symbol_1 = searchParams.get("symbol_1");
+      const upstox_id_1 = searchParams.get("upstox_id_1");
       const time_1 = searchParams.get("time_1");
       const price_1 = searchParams.get("price_1");
       const symbol_2 = searchParams.get("symbol_2");
+      const upstox_id_2 = searchParams.get("upstox_id_2");
       const time_2 = searchParams.get("time_2");
       const price_2 = searchParams.get("price_2");
       const symbol_3 = searchParams.get("symbol_3");
+      const upstox_id_3 = searchParams.get("upstox_id_3");
       const time_3 = searchParams.get("time_3");
       const price_3 = searchParams.get("price_3");
       const gap_1 = searchParams.get("gap_1");
@@ -99,12 +105,15 @@ export default function ArbitrageDetailsPage() {
         name,
         date,
         symbol_1: symbol_1 || "",
+        upstox_id_1: upstox_id_1 || undefined,
         time_1,
         price_1: parseFloat(price_1 || "0"),
         symbol_2: symbol_2 || "",
+        upstox_id_2: upstox_id_2 || undefined,
         time_2,
         price_2: parseFloat(price_2 || "0"),
         symbol_3: symbol_3 || "",
+        upstox_id_3: upstox_id_3 || undefined,
         time_3,
         price_3: parseFloat(price_3 || "0"),
         gap_1: parseFloat(gap_1 || "0"),
@@ -215,7 +224,26 @@ export default function ArbitrageDetailsPage() {
   // Extract three symbols from state for multi-symbol support
   const symbols = useMemo(() => {
     if (!state) return [];
-    return [state.symbol_1, state.symbol_2, state.symbol_3].filter(Boolean);
+
+    // Construct symbol objects with IDs if available
+    const symbolList = [
+      { symbol: state.symbol_1, upstoxId: state.upstox_id_1 },
+      { symbol: state.symbol_2, upstoxId: state.upstox_id_2 },
+      { symbol: state.symbol_3, upstox_id: state.upstox_id_3 } // Note: intentionally handling potential typo in state or just passed as undefined
+    ];
+
+    // Filter and map to correct structure
+    // We handle the third one carefully to match key names
+    const s3 = { symbol: state.symbol_3, upstoxId: state.upstox_id_3 };
+
+    return [
+      { symbol: state.symbol_1, upstoxId: state.upstox_id_1 },
+      { symbol: state.symbol_2, upstox_id: state.upstox_id_2 }, // Typo in previous line? No, just variable naming from state
+      s3
+    ].filter(s => s.symbol).map(s => ({
+      symbol: s.symbol,
+      upstoxId: s.upstoxId || (s as any).upstox_id || undefined
+    }));
   }, [state]);
 
   // Note: WebSocket connections are now managed by MultiSymbolLiveData component

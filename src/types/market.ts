@@ -31,11 +31,13 @@ export interface EquityInstrument {
   id: number;
   instrumentType: string;
   exchange: string;
+  upstoxId?: string;
 }
 
 export interface DerivativeSymbol {
   id: number;
   symbol: string;
+  upstoxId?: string;
   segment: "FUT" | "OPT" | null;
   expiryDate?: string | Date | null;
   strike?: string | null;
@@ -45,6 +47,7 @@ export interface DerivativeSymbol {
 
 export interface LiveTick {
   symbol: string;
+  symbolName?: string;
   ltp: number;
   volume?: number;
   bid?: number;
@@ -52,7 +55,7 @@ export interface LiveTick {
   ask?: number;
   askQty?: number;
   timestamp: string;
-   prevLtp?: number;
+  prevLtp?: number;
   change?: number;
   changePercent?: number;
 }
@@ -157,12 +160,14 @@ export interface CoveredCallsDetail {
   otm: number;
   premium_percentage: number;
   expiry_date: string;
+  underlying_upstox_id?: string;
 }
 
 export interface CoveredCallsSymbolExpiry {
   symbol: string;
   expiry_date: string;
   strike: number;
+  upstox_id?: string;
 }
 
 export interface CoveredCallsDetailsPagination {

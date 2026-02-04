@@ -24,14 +24,17 @@ interface ArbitrageData {
   time: string;
   nearFutureSymbol: string | null;
   nearFuturePrice: number | null;
+  nearFutureUpstoxId: string | null;
   nearFutureVolume: number | null;
   nearFutureTime: string | null;
   nextFutureSymbol: string | null;
   nextFuturePrice: number | null;
+  nextFutureUpstoxId: string | null;
   nextFutureVolume: number | null;
   nextFutureTime: string | null;
   farFutureSymbol: string | null;
   farFuturePrice: number | null;
+  farFutureUpstoxId: string | null;
   farFutureVolume: number | null;
   farFutureTime: string | null;
 }
@@ -234,12 +237,15 @@ export function ArbitrageView() {
         name: row.underlyingSymbol,
         date: row.time,
         symbol_1: row.nearFutureSymbol || '',
+        upstox_id_1: row.nearFutureUpstoxId || '',
         price_1: row.nearFuturePrice?.toString() || '',
         time_1: row.nearFutureTime?.toString() || '',
         symbol_2: row.nextFutureSymbol || '',
+        upstox_id_2: row.nextFutureUpstoxId || '',
         price_2: row.nextFuturePrice?.toString() || '',
         time_2: row.nextFutureTime?.toString() || '',
         symbol_3: row.farFutureSymbol || '',
+        upstox_id_3: row.farFutureUpstoxId || '',
         price_3: row.farFuturePrice?.toString() || '',
         time_3: row.farFutureTime?.toString() || '',
         gap_1: gap1.toString(),

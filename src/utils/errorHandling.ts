@@ -154,12 +154,12 @@ export class DataValidator {
 
     const trimmedSymbol = symbol.trim();
 
-    // Basic symbol validation - should be alphanumeric with possible hyphens/underscores
-    const symbolRegex = /^[A-Z0-9_-]+$/i;
+    // Symbol validation - alphanumeric with hyphens, underscores, and pipes (for Upstox keys like NSE_EQ|INE358A01014)
+    const symbolRegex = /^[A-Z0-9_|\-\s]+$/i;
 
     return (
       trimmedSymbol.length > 0 &&
-      trimmedSymbol.length <= 20 &&
+      trimmedSymbol.length <= 50 &&
       symbolRegex.test(trimmedSymbol)
     );
   }
