@@ -100,11 +100,11 @@ export function CoveredCallsView() {
   const [optionFilter, setOptionFilter] = useState<"" | "CE" | "PE">("CE");
   const [expiryFilter, setExpiryFilter] = useState<string[]>([]);
 
-  // Fetch covered calls data from API with pagination and filters
+  // Fetch covered calls data (rows)
   const fetchCoveredCallsData = useCallback(
     async (page: number = 1, filtersForApi: FiltersState = appliedFilters, signal?: AbortSignal) => {
       try {
-        setLoading({ isLoading: true, error: null });
+        setLoading((prev) => ({ ...prev, isLoading: true, error: null }));
 
         // Build query parameters using debounced filters
         const params = new URLSearchParams({
@@ -128,40 +128,27 @@ export function CoveredCallsView() {
         params.append("minPremium", filtersForApi.premiumMin.toString());
         params.append("maxPremium", filtersForApi.premiumMax.toString());
 
+        // Fetch data rows
         const response = await apiClient.get<{
           success: boolean;
           data: CoveredCallData[];
-          avg_premium: number;
-          expiry_month?: string[];
           count: number;
-          total: number;
           page: number;
           limit: number;
-          totalPages: number;
-          hasMore: boolean;
         }>(`${config.endpoints.coveredCalls}?${params.toString()}`, { signal });
 
         if (response.data.success) {
           setOptionContractsData(response.data.data);
-          // setAvgPremium(response.data.avg_premium || 0);
-          const expiryList =
-            response.data.expiry_month ??
-            [];
-          const normalized = Array.from(
-            new Set(
-              (expiryList || [])
-                .map((m) => (m ? m.toString().trim() : ""))
-                .filter(Boolean)
-            )
-          ).sort((a, b) => a.localeCompare(b));
-          setExpiryFilter(normalized);
-          setPagination({
-            total: response.data.total,
+
+          // Note: total count and pages will be updated by fetchStats
+          // But we can update page and limit here
+          setPagination((prev) => ({
+            ...prev,
             page: response.data.page,
             limit: response.data.limit,
-            totalPages: response.data.totalPages,
-            hasMore: response.data.hasMore,
-          });
+            hasMore: response.data.data.length === response.data.limit, // approximate hasMore
+          }));
+
           setLoading({ isLoading: false, error: null });
         } else {
           throw new Error("Failed to fetch covered calls data");
@@ -169,7 +156,6 @@ export function CoveredCallsView() {
       } catch (error: any) {
         // Ignore cancelled requests
         if (error?.cancelled || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED' || signal?.aborted) {
-          // console.log("[CoveredCallsView] Request cancelled, ignoring");
           return;
         }
         console.error("Error fetching covered calls data:", error);
@@ -182,10 +168,62 @@ export function CoveredCallsView() {
     [appliedFilters, pagination.limit]
   );
 
+  // Fetch covered calls stats (metadata: count, stats, expiry)
+  const fetchStats = useCallback(
+    async (filtersForApi: FiltersState = appliedFilters, signal?: AbortSignal) => {
+      try {
+        const params = new URLSearchParams();
+        if (filtersForApi.underlying.trim()) params.append("underlying", filtersForApi.underlying.trim());
+        if (filtersForApi.optionType) params.append("optionType", filtersForApi.optionType);
+        if (filtersForApi.expiryMonth) params.append("expiryMonth", filtersForApi.expiryMonth?.trim());
+        params.append("minOtm", filtersForApi.otmMin.toString());
+        params.append("maxOtm", filtersForApi.otmMax.toString());
+        params.append("minPremium", filtersForApi.premiumMin.toString());
+        params.append("maxPremium", filtersForApi.premiumMax.toString());
+
+        const response = await apiClient.get<{
+          success: boolean;
+          data: {
+            total: number;
+            avg_premium: number;
+            expiry_month: string[];
+          }
+        }>(`${config.endpoints.coveredCalls}/stats?${params.toString()}`, { signal });
+
+        if (response.data.success) {
+          const { total, expiry_month } = response.data.data;
+
+          // Update pagination total
+          setPagination((prev) => ({
+            ...prev,
+            total: total,
+            totalPages: Math.ceil(total / prev.limit),
+            hasMore: prev.page < Math.ceil(total / prev.limit)
+          }));
+
+          // Update expiry months filter
+          const expiryList = expiry_month ?? [];
+          const normalized = Array.from(
+            new Set(
+              (expiryList || [])
+                .map((m) => (m ? m.toString().trim() : ""))
+                .filter(Boolean)
+            )
+          ).sort((a, b) => a.localeCompare(b));
+          setExpiryFilter(normalized);
+        }
+      } catch (error: any) {
+        if (error?.cancelled || error?.name === 'CanceledError' || error?.code === 'ERR_CANCELED' || signal?.aborted) return;
+        console.error("Error fetching stats:", error);
+      }
+    }, [appliedFilters]
+  );
+
   // Fetch data on component mount (initial load with default filters)
   useEffect(() => {
     const controller = new AbortController();
     fetchCoveredCallsData(1, appliedFilters, controller.signal);
+    fetchStats(appliedFilters, controller.signal);
 
     return () => controller.abort();
     // We intentionally only load once on mount; filters are applied via button
@@ -194,7 +232,7 @@ export function CoveredCallsView() {
 
   // Handle page navigation
   const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= pagination.totalPages) {
+    if (newPage >= 1 && (pagination.totalPages === 0 || newPage <= pagination.totalPages)) {
       fetchCoveredCallsData(newPage);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -229,6 +267,7 @@ export function CoveredCallsView() {
     setAppliedFilters(filters);
     setPagination((prev) => ({ ...prev, page: 1 }));
     fetchCoveredCallsData(1, filters);
+    fetchStats(filters);
   };
 
   const handleResetFilters = () => {
@@ -245,6 +284,7 @@ export function CoveredCallsView() {
     setAppliedFilters(defaultFilters);
     setPagination((prev) => ({ ...prev, page: 1 }));
     fetchCoveredCallsData(1, defaultFilters);
+    fetchStats(defaultFilters);
   };
 
   const formatDateOnly = (ts?: string) => (ts ? new Date(ts).toLocaleDateString("en-GB", {
