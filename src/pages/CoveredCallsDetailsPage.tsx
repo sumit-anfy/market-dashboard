@@ -166,7 +166,7 @@ export default function CoveredCallsDetailsPage() {
   const { data: baseData } = useCoveredCallsDetails({
     instrumentId: instrumentId!,
     page: 1,
-    limit: 360,
+    limit: 100,
     optionType: "ALL",
   });
 

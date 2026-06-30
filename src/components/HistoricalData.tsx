@@ -47,7 +47,7 @@ export function HistoricalDataView() {
   const [dataError, setDataError] = useState<string | null>(null);
   const [paginationMeta, setPaginationMeta] = useState({
     total: 0,
-    limit: 360,
+    limit: 50,
     offset: 0,
     hasMore: false,
   });
@@ -252,7 +252,7 @@ export function HistoricalDataView() {
         break;
       case 'BSE_EQ':
         url = '/api/bse-equity';
-        params.underlying = symbolObject.name;
+        params.symbol = symbolObject.name;
         break;
       default:
         throw new Error('Unsupported segment selected.');

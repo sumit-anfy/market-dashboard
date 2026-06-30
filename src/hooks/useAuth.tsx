@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { apiClient, setAuthTokenHeader, setUnauthorizedHandler } from '@/config/axiosClient';
 
-type AuthStage = 'login' | 'otp' | 'authenticated';
+type AuthStage = 'login' | 'otp' | 'reset_password' | 'authenticated';
 
 type AuthContextValue = {
   token: string | null;
@@ -12,6 +12,10 @@ type AuthContextValue = {
   error: string | null;
   requestOtp: (username: string) => Promise<void>;
   verifyOtpCode: (otp: string) => Promise<void>;
+  loginWithPassword: (username: string, password: string) => Promise<void>;
+  requestPasswordReset: (username: string) => Promise<void>;
+  resetPassword: (username: string, otp: string, newPassword: string) => Promise<void>;
+  setStage: (stage: AuthStage) => void;
   logout: () => void;
   clearError: () => void;
 };
@@ -86,6 +90,58 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
+  const loginWithPassword = async (user: string, pass: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await apiClient.post('/api/auth/login-password', {
+        username: user,
+        password: pass,
+      });
+      const issuedToken = response.data?.token;
+      setToken(issuedToken);
+      setStage('authenticated');
+      localStorage.removeItem('pendingUsername');
+    } catch (err: any) {
+      setError(parseError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestPasswordReset = async (user: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiClient.post('/api/auth/forgot-password', { email: user });
+      setUsername(user);
+      localStorage.setItem('pendingUsername', user);
+      setStage('reset_password');
+    } catch (err: any) {
+      setError(parseError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetPassword = async (user: string, otp: string, newPass: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      await apiClient.post('/api/auth/reset-password', {
+        email: user,
+        otp,
+        newPassword: newPass,
+      });
+      setStage('login');
+      // Show success message or just let user login with new password
+    } catch (err: any) {
+      setError(parseError(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const logout = () => {
     setToken(null);
     setStage('login');
@@ -107,6 +163,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       error,
       requestOtp,
       verifyOtpCode,
+      loginWithPassword,
+      requestPasswordReset,
+      resetPassword,
+      setStage,
       logout,
       clearError,
     }),
@@ -119,6 +179,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       error,
       requestOtp,
       verifyOtpCode,
+      loginWithPassword,
+      requestPasswordReset,
+      resetPassword,
       logout,
       clearError,
     ]

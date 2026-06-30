@@ -79,7 +79,7 @@ export function CoveredCallsView() {
   const [pagination, setPagination] = useState<PaginationInfo>({
     total: 0,
     page: 1,
-    limit: 360,
+    limit: 50,
     totalPages: 0,
     hasMore: false,
   });

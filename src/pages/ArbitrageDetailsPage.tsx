@@ -131,7 +131,7 @@ export default function ArbitrageDetailsPage() {
   const [isGapFilterActive, setIsGapFilterActive] = useState(false);
   // Live data state is now managed by MultiSymbolLiveData component
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(360);
+  const [itemsPerPage] = useState(50);
   const [selectedStartDate, setSelectedStartDate] = useState<string>("");
   const [selectedEndDate, setSelectedEndDate] = useState<string>("");
   const [dateRangeBounds, setDateRangeBounds] = useState<{
@@ -226,11 +226,11 @@ export default function ArbitrageDetailsPage() {
     if (!state) return [];
 
     // Construct symbol objects with IDs if available
-    const symbolList = [
-      { symbol: state.symbol_1, upstoxId: state.upstox_id_1 },
-      { symbol: state.symbol_2, upstoxId: state.upstox_id_2 },
-      { symbol: state.symbol_3, upstox_id: state.upstox_id_3 } // Note: intentionally handling potential typo in state or just passed as undefined
-    ];
+    // const symbolList = [
+    //   { symbol: state.symbol_1, upstoxId: state.upstox_id_1 },
+    //   { symbol: state.symbol_2, upstoxId: state.upstox_id_2 },
+    //   { symbol: state.symbol_3, upstox_id: state.upstox_id_3 } // Note: intentionally handling potential typo in state or just passed as undefined
+    // ];
 
     // Filter and map to correct structure
     // We handle the third one carefully to match key names
@@ -550,20 +550,19 @@ export default function ArbitrageDetailsPage() {
     const map = new Map<string, string>();
     let colorIndex = 0;
 
-    // Ensure chronological order so months get stable, sequential colors
-    const sorted = [...filteredData].sort(
-      (a: any, b: any) =>
-        new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
+    // Get unique months in chronological order
+    const months = Array.from(new Set(
+      filteredData
+        .map((row: any) => {
+          const d = new Date(row.date);
+          return isNaN(d.getTime()) ? null : monthKey(d);
+        })
+        .filter(Boolean) as string[]
+    )).sort();
 
-    for (const row of sorted) {
-      const d = new Date(row.date);
-      if (isNaN(d.getTime())) continue;
-      const key = monthKey(d);
-      if (!map.has(key)) {
-        map.set(key, colorPalette[colorIndex % colorPalette.length]);
-        colorIndex++;
-      }
+    for (const key of months) {
+      map.set(key, colorPalette[colorIndex % colorPalette.length]);
+      colorIndex++;
     }
 
     return map;

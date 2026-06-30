@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 // import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/config/axiosClient';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -161,51 +161,75 @@ export function ArbitrageView() {
   };
 
   // Filter data based on gap percentages
-  const filteredData = arbitrageData.filter(row => {
-    // Check if at least one gap can be calculated
-    const hasNextNearGap = row.nextFuturePrice && row.nearFuturePrice;
-    const hasFarNextGap = row.farFuturePrice && row.nextFuturePrice;
-    const hasFarNearGap = row.farFuturePrice && row.nearFuturePrice;
+  const filteredData = useMemo(() => {
+    return arbitrageData.filter(row => {
+      // Check if at least one gap can be calculated
+      const hasNextNearGap = row.nextFuturePrice && row.nearFuturePrice;
+      const hasFarNextGap = row.farFuturePrice && row.nextFuturePrice;
+      const hasFarNearGap = row.farFuturePrice && row.nearFuturePrice;
 
-    // Exclude rows where ALL three gaps are null/N/A
-    if (!hasNextNearGap && !hasFarNextGap && !hasFarNearGap) {
-      return false;
-    }
+      // Exclude rows where ALL three gaps are null/N/A
+      if (!hasNextNearGap && !hasFarNextGap && !hasFarNearGap) {
+        return false;
+      }
 
-    // Calculate gaps only if data exists
-    let passesNextNearFilter = true;
-    let passesFarNextFilter = true;
-    let passesFarNearFilter = true;
+      // Calculate gaps only if data exists
+      let passesNextNearFilter = true;
+      let passesFarNextFilter = true;
+      let passesFarNearFilter = true;
 
-    // Check Next/Near gap filter only if both prices exist
-    if (hasNextNearGap) {
-      const gapNextNear = calculateGap(row.nextFuturePrice!, row.nearFuturePrice!, row.underlyingPrice);
-      passesNextNearFilter = gapNextNear.gapPercentage >= filters.nextNearMin &&
-        gapNextNear.gapPercentage <= filters.nextNearMax;
-    }
+      // Check Next/Near gap filter only if both prices exist
+      if (hasNextNearGap) {
+        const gapNextNear = calculateGap(row.nextFuturePrice!, row.nearFuturePrice!, row.underlyingPrice);
+        passesNextNearFilter = gapNextNear.gapPercentage >= filters.nextNearMin &&
+          gapNextNear.gapPercentage <= filters.nextNearMax;
+      }
 
-    // Check Far/Next gap filter only if both prices exist
-    if (hasFarNextGap) {
-      const gapFarNext = calculateGap(row.farFuturePrice!, row.nextFuturePrice!, row.underlyingPrice);
-      passesFarNextFilter = gapFarNext.gapPercentage >= filters.farNextMin &&
-        gapFarNext.gapPercentage <= filters.farNextMax;
-    }
+      // Check Far/Next gap filter only if both prices exist
+      if (hasFarNextGap) {
+        const gapFarNext = calculateGap(row.farFuturePrice!, row.nextFuturePrice!, row.underlyingPrice);
+        passesFarNextFilter = gapFarNext.gapPercentage >= filters.farNextMin &&
+          gapFarNext.gapPercentage <= filters.farNextMax;
+      }
 
-    // Check Far/Near gap filter only if both prices exist
-    if (hasFarNearGap) {
-      const gapFarNear = calculateGap(row.farFuturePrice!, row.nearFuturePrice!, row.underlyingPrice);
-      passesFarNearFilter = gapFarNear.gapPercentage >= filters.farNearMin &&
-        gapFarNear.gapPercentage <= filters.farNearMax;
-    }
+      // Check Far/Near gap filter only if both prices exist
+      if (hasFarNearGap) {
+        const gapFarNear = calculateGap(row.farFuturePrice!, row.nearFuturePrice!, row.underlyingPrice);
+        passesFarNearFilter = gapFarNear.gapPercentage >= filters.farNearMin &&
+          gapFarNear.gapPercentage <= filters.farNearMax;
+      }
 
-    return passesNextNearFilter && passesFarNextFilter && passesFarNearFilter;
-  });
+      return passesNextNearFilter && passesFarNextFilter && passesFarNearFilter;
+    });
+  }, [arbitrageData, filters]);
 
   // Pagination calculations
-  const totalPages = Math.ceil(filteredData.length / rowsPerPage);
-  const startIndex = (currentPage - 1) * rowsPerPage;
-  const endIndex = startIndex + rowsPerPage;
-  const paginatedData = filteredData.slice(startIndex, endIndex);
+  const totalPages = useMemo(() => Math.ceil(filteredData.length / rowsPerPage), [filteredData.length, rowsPerPage]);
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    const endIndex = startIndex + rowsPerPage;
+    return filteredData.slice(startIndex, endIndex);
+  }, [filteredData, currentPage, rowsPerPage]);
+
+  // Summary statistics memoization
+  const stats = useMemo(() => {
+    if (filteredData.length === 0) return { avgNextNear: '0.0', avgFarNear: '0.0' };
+    
+    const sumNextNear = filteredData.reduce((acc: number, row: ArbitrageData) => {
+      const gap = calculateGap(row.nextFuturePrice || 0, row.nearFuturePrice || 0, row.underlyingPrice || 0);
+      return acc + gap.gapPercentage;
+    }, 0);
+    
+    const sumFarNear = filteredData.reduce((acc: number, row: ArbitrageData) => {
+      const gap = calculateGap(row.farFuturePrice || 0, row.nearFuturePrice || 0, row.underlyingPrice || 0);
+      return acc + gap.gapPercentage;
+    }, 0);
+
+    return {
+      avgNextNear: (sumNextNear / filteredData.length).toFixed(1),
+      avgFarNear: (sumFarNear / filteredData.length).toFixed(1)
+    };
+  }, [filteredData]);
 
   // Reset to first page when filters change
   useEffect(() => {
@@ -585,7 +609,7 @@ export function ArbitrageView() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedData.map((row: ArbitrageData, index) => {
+                  paginatedData.map((row: ArbitrageData, index: number) => {
                     // Calculate gaps only if data exists
                     const gapNextNear = (row.nextFuturePrice && row.nearFuturePrice)
                       ? calculateGap(row.nextFuturePrice, row.nearFuturePrice, row.underlyingPrice)
@@ -704,7 +728,7 @@ export function ArbitrageView() {
               {/* Page info and navigation */}
               <div className="flex items-center gap-4">
                 <span className="text-sm text-muted-foreground">
-                  Showing {startIndex + 1}-{Math.min(endIndex, filteredData.length)} of {filteredData.length}
+                  Showing {(currentPage - 1) * rowsPerPage + 1}-{Math.min(currentPage * rowsPerPage, filteredData.length)} of {filteredData.length}
                 </span>
 
                 <div className="flex items-center gap-2">
@@ -770,12 +794,7 @@ export function ArbitrageView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">
-              {filteredData.length > 0 ? (
-                filteredData.reduce((acc, row) => {
-                  const gap = calculateGap(row.nextFuturePrice || 0, row.nearFuturePrice || 0, row.underlyingPrice || 0);
-                  return acc + gap.gapPercentage;
-                }, 0) / filteredData.length
-              ).toFixed(1) : '0.0'}%
+              {stats.avgNextNear}%
             </div>
             <p className="text-xs text-muted-foreground">Average Next/Near gap</p>
           </CardContent>
@@ -787,12 +806,7 @@ export function ArbitrageView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono">
-              {filteredData.length > 0 ? (
-                filteredData.reduce((acc, row) => {
-                  const gap = calculateGap(row.farFuturePrice || 0, row.nearFuturePrice || 0, row.underlyingPrice || 0);
-                  return acc + gap.gapPercentage;
-                }, 0) / filteredData.length
-              ).toFixed(1) : '0.0'}%
+              {stats.avgFarNear}%
             </div>
             <p className="text-xs text-muted-foreground">Average Far/Near gap</p>
           </CardContent>
