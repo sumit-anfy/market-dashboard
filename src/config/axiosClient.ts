@@ -68,7 +68,7 @@ let unauthorizedHandler: (() => void) | null = null;
  * Create configured Axios instance
  */
 const createAxiosInstance = (): AxiosInstance => {
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://api.anfy.in';
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.anfy.in';
 
   const instance = axios.create({
     baseURL: API_BASE_URL,

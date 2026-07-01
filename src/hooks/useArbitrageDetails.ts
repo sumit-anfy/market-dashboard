@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { apiClient } from "../config/axiosClient";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL + '/api' || "http://api.anfy.in/api";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "https://api.anfy.in") + '/api';
 
 interface UseArbitrageDetailsParams {
   instrumentId: string;

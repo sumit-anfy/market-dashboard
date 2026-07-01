@@ -78,6 +78,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         otp,
       });
       const issuedToken = response.data?.token;
+      if (!issuedToken) {
+        setError('Login failed: no token returned');
+        setStage('otp');
+        return;
+      }
       setToken(issuedToken);
       setStage('authenticated');
       setOtpExpiresAt(null);
@@ -99,6 +104,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         password: pass,
       });
       const issuedToken = response.data?.token;
+      if (!issuedToken) {
+        setError('Login failed: no token returned');
+        return;
+      }
       setToken(issuedToken);
       setStage('authenticated');
       localStorage.removeItem('pendingUsername');

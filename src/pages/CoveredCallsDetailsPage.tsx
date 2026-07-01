@@ -163,10 +163,12 @@ export default function CoveredCallsDetailsPage() {
   }, [isMarketHours]);
 
   // Fetch base list used to derive symbols/strikes (no historical UI shown)
+  // Needs a large limit: baseData.find() below must be able to locate any
+  // navigated option, even instruments with a large option chain.
   const { data: baseData } = useCoveredCallsDetails({
     instrumentId: instrumentId!,
     page: 1,
-    limit: 100,
+    limit: 360,
     optionType: "ALL",
   });
 
